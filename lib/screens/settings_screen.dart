@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/water_entry.dart';
 import '../providers/providers.dart';
 import '../theme/app_theme.dart';
+import 'debug_screen.dart';
 
 /// Settings screen - Configure app preferences
 /// 
@@ -340,14 +342,7 @@ class SettingsScreen extends ConsumerWidget {
       color: theme.colorScheme.surfaceContainerHighest,
       child: Column(
         children: [
-          ListTile(
-            title: const Text('AquaTrack'),
-            subtitle: const Text('Version 1.0.0'),
-            leading: Icon(
-              Icons.water_drop,
-              color: theme.colorScheme.primary,
-            ),
-          ),
+          _VersionTile(),
           const ListTile(
             title: Text('Made with 💙'),
             subtitle: Text('Stay hydrated, stay healthy!'),
@@ -356,6 +351,7 @@ class SettingsScreen extends ConsumerWidget {
       ),
     );
   }
+
 
   void _showCustomGoalDialog(
     BuildContext context, 
@@ -552,6 +548,88 @@ class _IntervalOption extends StatelessWidget {
           }
         }
       },
+    );
+  }
+}
+
+/// Version tile that unlocks debug menu after tapping 7 times
+class _VersionTile extends StatefulWidget {
+  @override
+  State<_VersionTile> createState() => _VersionTileState();
+}
+
+class _VersionTileState extends State<_VersionTile> {
+  int _tapCount = 0;
+  bool _debugUnlocked = false;
+  DateTime? _lastTap;
+
+  void _handleTap() {
+    final now = DateTime.now();
+    
+    // Reset count if more than 2 seconds since last tap
+    if (_lastTap != null && now.difference(_lastTap!) > const Duration(seconds: 2)) {
+      _tapCount = 0;
+    }
+    _lastTap = now;
+    
+    setState(() {
+      _tapCount++;
+    });
+
+    if (_tapCount >= 7 && !_debugUnlocked) {
+      setState(() {
+        _debugUnlocked = true;
+      });
+      HapticFeedback.heavyImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('🔧 Debug menu unlocked!'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } else if (_tapCount >= 4 && !_debugUnlocked) {
+      HapticFeedback.lightImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${7 - _tapCount} more taps to unlock debug menu'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      children: [
+        ListTile(
+          title: const Text('AquaTrack'),
+          subtitle: Text(_debugUnlocked ? 'Version 1.0.0 (Debug)' : 'Version 1.0.0'),
+          leading: Icon(
+            Icons.water_drop,
+            color: theme.colorScheme.primary,
+          ),
+          onTap: _handleTap,
+        ),
+        if (_debugUnlocked)
+          ListTile(
+            title: const Text('🔧 Debug Menu'),
+            subtitle: const Text('Developer tools & testing'),
+            leading: const Icon(
+              Icons.bug_report_rounded,
+              color: Colors.orange,
+            ),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const DebugScreen()),
+              );
+            },
+          ),
+      ],
     );
   }
 }

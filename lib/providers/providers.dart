@@ -77,6 +77,12 @@ class SettingsNotifier extends StateNotifier<UserSettings> {
     state = _storageService.getSettings();
   }
 
+  /// Update all settings at once (for debug)
+  Future<void> updateSettings(UserSettings settings) async {
+    await _storageService.updateSettings(settings);
+    state = _storageService.getSettings();
+  }
+
   /// Refresh settings from storage
   void refresh() {
     _loadSettings();
