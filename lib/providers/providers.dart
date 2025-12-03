@@ -117,9 +117,10 @@ class WaterEntriesNotifier extends StateNotifier<List<WaterEntry>> {
 
   /// Add a new water entry and track it for undo
   Future<WaterEntry> addEntry(double amountMl, {String? note}) async {
-    // Get current total before adding
-    final previousTotal = _ref.read(todayTotalProvider);
-    final goal = _ref.read(settingsProvider).dailyGoalMl;
+    // Get current total before adding (from state directly, not provider to avoid circular dep)
+    final previousTotal = state.fold(0.0, (sum, e) => sum + e.amountMl);
+    final settings = _ref.read(settingsProvider);
+    final goal = settings.dailyGoalMl;
     final wasGoalReached = previousTotal >= goal;
     
     final entry = await _storageService.addWaterEntry(amountMl, note: note);
@@ -133,19 +134,29 @@ class WaterEntriesNotifier extends StateNotifier<List<WaterEntry>> {
     // Notify undo provider of new entry
     _ref.read(undoProvider.notifier).setUndoableEntry(entry);
     
-    // Check if goal was just reached
+    // Check if goal was just reached (from state directly)
     final newTotal = state.fold(0.0, (sum, e) => sum + e.amountMl);
     if (!wasGoalReached && newTotal >= goal) {
       _ref.read(celebrationProvider.notifier).triggerGoalCelebration();
     }
     
-    // Check and unlock achievements
-    final newAchievements = await _ref.read(achievementsProvider.notifier).checkAndUnlockAchievements();
-    if (newAchievements.isNotEmpty) {
-      _ref.read(celebrationProvider.notifier).triggerAchievementCelebration(newAchievements.first);
-    }
+    // Check and unlock achievements (defer to avoid blocking)
+    _checkAchievementsAsync();
     
     return entry;
+  }
+  
+  /// Check achievements asynchronously to avoid blocking the add flow
+  void _checkAchievementsAsync() async {
+    try {
+      final newAchievements = await _ref.read(achievementsProvider.notifier).checkAndUnlockAchievements();
+      if (newAchievements.isNotEmpty) {
+        _ref.read(celebrationProvider.notifier).triggerAchievementCelebration(newAchievements.first);
+      }
+    } catch (e) {
+      // Silently handle achievement check errors to not break the main flow
+      debugPrint('Achievement check error: $e');
+    }
   }
 
   /// Undo the last added entry
@@ -546,8 +557,9 @@ class AchievementsNotifier extends StateNotifier<AchievementsState> {
     final newlyUnlocked = <AchievementDefinition>[];
     
     final settings = _ref.read(settingsProvider);
-    final todayTotal = _ref.read(todayTotalProvider);
-    final entries = _ref.read(todayEntriesProvider);
+    // Get entries directly from storage to avoid circular dependencies
+    final entries = _storageService.getTodayEntries();
+    final todayTotal = entries.fold(0.0, (sum, e) => sum + e.amountMl);
     final totalLogged = _storageService.getTotalWaterLogged();
     final entryCount = _storageService.getTotalEntryCount();
     final streak = settings.currentStreak;
