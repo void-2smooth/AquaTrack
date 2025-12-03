@@ -129,26 +129,29 @@ class HomeScreen extends ConsumerWidget {
   }
 
   Widget _buildProgressCard(BuildContext context, bool isDark) {
-    return Container(
-      padding: EdgeInsets.all(AppDimens.paddingXXL),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isDark
-              ? [AppColors.cardDark, AppColors.cardDark.withOpacity(0.8)]
-              : [Colors.white, Colors.white.withOpacity(0.9)],
+    // Use RepaintBoundary to isolate expensive progress bar repaints
+    return RepaintBoundary(
+      child: Container(
+        padding: EdgeInsets.all(AppDimens.paddingXXL),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDark
+                ? [AppColors.cardDark, AppColors.cardDark.withOpacity(0.8)]
+                : [Colors.white, Colors.white.withOpacity(0.9)],
+          ),
+          borderRadius: BorderRadius.circular(AppDimens.radiusXXL),
+          boxShadow: isDark ? [] : AppShadows.large,
+          border: isDark
+              ? Border.all(color: Colors.white.withOpacity(0.1))
+              : null,
         ),
-        borderRadius: BorderRadius.circular(AppDimens.radiusXXL),
-        boxShadow: isDark ? [] : AppShadows.large,
-        border: isDark
-            ? Border.all(color: Colors.white.withOpacity(0.1))
-            : null,
-      ),
-      child: Column(
-        children: [
-          const WaterProgressBar(),
-        ],
+        child: const Column(
+          children: [
+            WaterProgressBar(),
+          ],
+        ),
       ),
     );
   }

@@ -12,12 +12,15 @@ class MotivationalMessage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Use select to only rebuild when these specific values change
     final message = ref.watch(motivationalMessageProvider);
     final progress = ref.watch(todayProgressUncappedProvider);
     final theme = Theme.of(context);
     final gradientColors = AppColors.getMotivationGradient(progress);
 
-    return AnimatedSwitcher(
+    // Wrap in RepaintBoundary to isolate repaints
+    return RepaintBoundary(
+      child: AnimatedSwitcher(
       duration: Duration(milliseconds: AppDimens.animationSlow),
       child: Container(
         key: ValueKey(message),
@@ -57,6 +60,7 @@ class MotivationalMessage extends ConsumerWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

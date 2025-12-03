@@ -1,30 +1,97 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/achievement.dart';
 import '../models/water_entry.dart';
 import '../providers/providers.dart';
 import '../theme/app_theme.dart';
+import '../main.dart' show ProviderLogger;
 
 /// Debug/Cheat menu for testing app features
 /// 
 /// Access this screen by long-pressing the app title or through settings.
 /// Only use for development and testing purposes.
-class DebugScreen extends ConsumerWidget {
+class DebugScreen extends ConsumerStatefulWidget {
   const DebugScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DebugScreen> createState() => _DebugScreenState();
+}
+
+class _DebugScreenState extends ConsumerState<DebugScreen> {
+  // Performance tracking
+  late Ticker _ticker;
+  int _frameCount = 0;
+  double _fps = 0;
+  DateTime _lastFpsUpdate = DateTime.now();
+  int _buildCount = 0;
+  final Stopwatch _buildStopwatch = Stopwatch();
+  double _lastBuildTime = 0;
+  
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Ticker(_onTick)..start();
+  }
+  
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
+  
+  void _onTick(Duration elapsed) {
+    _frameCount++;
+    final now = DateTime.now();
+    final diff = now.difference(_lastFpsUpdate);
+    if (diff.inMilliseconds >= 1000) {
+      setState(() {
+        _fps = _frameCount / (diff.inMilliseconds / 1000);
+        _frameCount = 0;
+        _lastFpsUpdate = now;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _buildCount++;
+    _buildStopwatch.reset();
+    _buildStopwatch.start();
+    
     final theme = Theme.of(context);
     final settings = ref.watch(settingsProvider);
     final achievementsState = ref.watch(achievementsProvider);
     final todayTotal = ref.watch(todayTotalProvider);
     final entries = ref.watch(todayEntriesProvider);
+    final containers = ref.watch(containersProvider);
+    
+    // Calculate storage stats
+    final storageService = ref.read(storageServiceProvider);
+    final totalEntries = storageService.getTotalEntryCount();
+    final totalWater = storageService.getTotalWaterLogged();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _buildStopwatch.stop();
+      if (mounted) {
+        setState(() {
+          _lastBuildTime = _buildStopwatch.elapsedMicroseconds / 1000;
+        });
+      }
+    });
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('🔧 Debug Menu'),
         backgroundColor: Colors.orange.withOpacity(0.2),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: () => setState(() {}),
+            tooltip: 'Refresh',
+          ),
+        ],
       ),
       body: ListView(
         padding: EdgeInsets.all(AppDimens.paddingL),
@@ -43,7 +110,7 @@ class DebugScreen extends ConsumerWidget {
                 SizedBox(width: AppDimens.paddingM),
                 Expanded(
                   child: Text(
-                    'Debug menu for development only. Changes here may affect app data.',
+                    'Debug menu for development only.',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: Colors.orange.shade700,
                     ),
@@ -54,15 +121,40 @@ class DebugScreen extends ConsumerWidget {
           ),
           SizedBox(height: AppDimens.paddingXL),
 
+          // Performance Stats Section
+          _buildSectionHeader(context, '⚡ Performance'),
+          _PerformanceCard(
+            fps: _fps,
+            buildCount: _buildCount,
+            lastBuildTime: _lastBuildTime,
+          ),
+          SizedBox(height: AppDimens.paddingXL),
+
+          // Provider Stats Section
+          _buildSectionHeader(context, '🔄 Provider Stats'),
+          _ProviderStatsCard(),
+          SizedBox(height: AppDimens.paddingXL),
+
+          // Storage Stats Section
+          _buildSectionHeader(context, '💾 Storage Stats'),
+          _buildStatCard(context, [
+            _StatItem('Total Entries', '$totalEntries'),
+            _StatItem('Total Water Logged', '${(totalWater / 1000).toStringAsFixed(1)} L'),
+            _StatItem('Containers', '${containers.length}'),
+            _StatItem('Achievements Unlocked', '${achievementsState.totalUnlocked}'),
+            _StatItem('Unseen Achievements', '${ref.read(achievementsProvider.notifier).unseenCount}'),
+          ]),
+          SizedBox(height: AppDimens.paddingXL),
+
           // Current Stats Section
-          _buildSectionHeader(context, '📊 Current Stats'),
+          _buildSectionHeader(context, '📊 App State'),
           _buildStatCard(context, [
             _StatItem('Today Total', '${todayTotal.toStringAsFixed(0)} ml'),
             _StatItem('Today Entries', '${entries.length}'),
             _StatItem('Current Streak', '${settings.currentStreak} days'),
             _StatItem('Longest Streak', '${settings.longestStreak} days'),
-            _StatItem('Achievements', '${achievementsState.totalUnlocked}/${achievementsState.totalAchievements}'),
             _StatItem('Daily Goal', '${settings.dailyGoalMl.toStringAsFixed(0)} ml'),
+            _StatItem('Goal Progress', '${((todayTotal / settings.dailyGoalMl) * 100).toStringAsFixed(1)}%'),
           ]),
           SizedBox(height: AppDimens.paddingXL),
 
@@ -605,6 +697,317 @@ class _AchievementPickerDialog extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+/// Performance statistics card
+class _PerformanceCard extends StatelessWidget {
+  final double fps;
+  final int buildCount;
+  final double lastBuildTime;
+
+  const _PerformanceCard({
+    required this.fps,
+    required this.buildCount,
+    required this.lastBuildTime,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = context.isDarkMode;
+
+    Color fpsColor;
+    String fpsStatus;
+    if (fps >= 55) {
+      fpsColor = Colors.green;
+      fpsStatus = 'Excellent';
+    } else if (fps >= 45) {
+      fpsColor = Colors.orange;
+      fpsStatus = 'Good';
+    } else if (fps >= 30) {
+      fpsColor = Colors.deepOrange;
+      fpsStatus = 'Fair';
+    } else {
+      fpsColor = Colors.red;
+      fpsStatus = 'Poor';
+    }
+
+    return Container(
+      padding: EdgeInsets.all(AppDimens.paddingL),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.cardDark : Colors.white,
+        borderRadius: BorderRadius.circular(AppDimens.radiusL),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.1) : Colors.grey.shade200,
+        ),
+      ),
+      child: Column(
+        children: [
+          // FPS Indicator
+          Row(
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: fpsColor.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: fpsColor, width: 3),
+                ),
+                child: Center(
+                  child: Text(
+                    fps.toStringAsFixed(0),
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: fpsColor,
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: AppDimens.paddingL),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Frame Rate',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: AppDimens.paddingXS),
+                    Row(
+                      children: [
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: AppDimens.paddingS,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: fpsColor.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(AppDimens.radiusXS),
+                          ),
+                          child: Text(
+                            fpsStatus,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: fpsColor,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: AppDimens.paddingS),
+                        Text(
+                          'Target: 60 FPS',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface.withOpacity(0.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: AppDimens.paddingL),
+          Divider(height: 1, color: theme.colorScheme.outline.withOpacity(0.1)),
+          SizedBox(height: AppDimens.paddingL),
+          // Build Stats
+          Row(
+            children: [
+              Expanded(
+                child: _PerfMetric(
+                  icon: Icons.architecture_rounded,
+                  label: 'Builds',
+                  value: '$buildCount',
+                  color: Colors.blue,
+                ),
+              ),
+              Container(
+                height: 40,
+                width: 1,
+                color: theme.colorScheme.outline.withOpacity(0.1),
+              ),
+              Expanded(
+                child: _PerfMetric(
+                  icon: Icons.timer_rounded,
+                  label: 'Build Time',
+                  value: '${lastBuildTime.toStringAsFixed(2)}ms',
+                  color: lastBuildTime < 16 ? Colors.green : Colors.orange,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PerfMetric extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  const _PerfMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 24),
+        SizedBox(height: AppDimens.paddingXS),
+        Text(
+          value,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurface.withOpacity(0.6),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Provider statistics card
+class _ProviderStatsCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = context.isDarkMode;
+    final topProviders = ProviderLogger.getTopProviders(limit: 5);
+    final totalUpdates = ProviderLogger.updateCount;
+
+    return Container(
+      padding: EdgeInsets.all(AppDimens.paddingL),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.cardDark : Colors.white,
+        borderRadius: BorderRadius.circular(AppDimens.radiusL),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.1) : Colors.grey.shade200,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.sync_rounded, color: Colors.purple, size: 20),
+                  SizedBox(width: AppDimens.paddingS),
+                  Text(
+                    'Total Updates: $totalUpdates',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              TextButton.icon(
+                onPressed: () {
+                  ProviderLogger.reset();
+                },
+                icon: const Icon(Icons.restart_alt_rounded, size: 16),
+                label: const Text('Reset'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.orange,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppDimens.paddingS,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (topProviders.isNotEmpty) ...[
+            SizedBox(height: AppDimens.paddingM),
+            Divider(height: 1, color: theme.colorScheme.outline.withOpacity(0.1)),
+            SizedBox(height: AppDimens.paddingM),
+            Text(
+              'Most Active Providers',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.5),
+              ),
+            ),
+            SizedBox(height: AppDimens.paddingS),
+            ...topProviders.map((entry) => Padding(
+              padding: EdgeInsets.only(bottom: AppDimens.paddingXS),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _formatProviderName(entry.key),
+                      style: theme.textTheme.bodySmall,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: AppDimens.paddingS,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _getUpdateColor(entry.value).withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(AppDimens.radiusXS),
+                    ),
+                    child: Text(
+                      '${entry.value}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: _getUpdateColor(entry.value),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )),
+          ] else
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: AppDimens.paddingM),
+              child: Text(
+                'No provider updates yet',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _formatProviderName(String name) {
+    // Remove 'Provider' suffix and format
+    return name
+        .replaceAll('Provider', '')
+        .replaceAll('AutoDispose', '')
+        .replaceAll('<', '')
+        .replaceAll('>', '');
+  }
+
+  Color _getUpdateColor(int count) {
+    if (count > 50) return Colors.red;
+    if (count > 20) return Colors.orange;
+    if (count > 10) return Colors.amber;
+    return Colors.green;
   }
 }
 

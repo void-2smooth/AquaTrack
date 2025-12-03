@@ -41,6 +41,7 @@ void main() async {
 
   runApp(
     ProviderScope(
+      observers: [ProviderLogger()],
       overrides: [
         // Override with initialized services
         storageServiceProvider.overrideWithValue(storageService),
@@ -49,6 +50,57 @@ void main() async {
       child: const AquaTrackApp(),
     ),
   );
+}
+
+/// Provider observer for debugging and performance monitoring
+class ProviderLogger extends ProviderObserver {
+  static int updateCount = 0;
+  static final Map<String, int> providerUpdateCounts = {};
+  
+  @override
+  void didUpdateProvider(
+    ProviderBase<Object?> provider,
+    Object? previousValue,
+    Object? newValue,
+    ProviderContainer container,
+  ) {
+    updateCount++;
+    final name = provider.name ?? provider.runtimeType.toString();
+    providerUpdateCounts[name] = (providerUpdateCounts[name] ?? 0) + 1;
+    
+    // Uncomment for verbose logging during development:
+    // debugPrint('[Provider] $name updated (total: ${providerUpdateCounts[name]})');
+  }
+  
+  @override
+  void didAddProvider(
+    ProviderBase<Object?> provider,
+    Object? value,
+    ProviderContainer container,
+  ) {
+    // Provider was created
+  }
+  
+  @override
+  void didDisposeProvider(
+    ProviderBase<Object?> provider,
+    ProviderContainer container,
+  ) {
+    // Provider was disposed
+  }
+  
+  /// Reset all counters
+  static void reset() {
+    updateCount = 0;
+    providerUpdateCounts.clear();
+  }
+  
+  /// Get most frequently updated providers
+  static List<MapEntry<String, int>> getTopProviders({int limit = 5}) {
+    final sorted = providerUpdateCounts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return sorted.take(limit).toList();
+  }
 }
 
 /// Root application widget
