@@ -24,6 +24,7 @@ dependencies:
   
   # UI Components
   percent_indicator: ^4.2.3
+  fl_chart: ^0.66.2
   
   # Utilities
   intl: ^0.18.1

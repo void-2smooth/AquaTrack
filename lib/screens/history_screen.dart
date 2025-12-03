@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../providers/providers.dart';
 import '../models/water_entry.dart';
 import '../theme/app_theme.dart';
+import '../widgets/weekly_chart.dart';
 
 /// History screen - Shows past daily water intake records
 /// 
@@ -29,13 +30,23 @@ class HistoryScreen extends ConsumerWidget {
           : ListView.builder(
               physics: const BouncingScrollPhysics(),
               padding: EdgeInsets.all(AppDimens.paddingL),
-              itemCount: dailySummaries.length + 1, // +1 for stats header
+              itemCount: dailySummaries.length + 2, // +2 for chart and stats header
               itemBuilder: (context, index) {
+                // Weekly chart at the top
                 if (index == 0) {
+                  return Padding(
+                    padding: EdgeInsets.only(bottom: AppDimens.paddingL),
+                    child: const WeeklyChart(),
+                  );
+                }
+                
+                // Stats header
+                if (index == 1) {
                   return _buildStatsHeader(context, dailySummaries, settings);
                 }
                 
-                final summary = dailySummaries[index - 1];
+                // Daily summaries
+                final summary = dailySummaries[index - 2];
                 return _DailySummaryCard(
                   summary: summary,
                   useMetricUnits: settings.useMetricUnits,

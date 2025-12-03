@@ -38,7 +38,7 @@
 ## 📊 Analytics & Insights
 
 ### Charts & Visualizations
-- [ ] **Weekly Bar Chart** - Daily intake for the past 7 days
+- [x] **Weekly Bar Chart** - Daily intake for the past 7 days ✅
 - [ ] **Monthly Calendar Heatmap** - Color-coded days by completion
 - [ ] **Trend Line Graph** - Long-term intake trends
 - [ ] **Time Distribution Pie Chart** - When you drink most
@@ -253,7 +253,7 @@
 ### Phase 1 - Core Enhancements
 1. ✅ Modern UI redesign
 2. ✅ Container presets
-3. ⬜ Weekly chart visualization
+3. ✅ Weekly chart visualization
 4. ⬜ Undo functionality
 
 ### Phase 2 - Engagement

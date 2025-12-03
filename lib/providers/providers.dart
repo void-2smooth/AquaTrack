@@ -156,6 +156,63 @@ final dailySummariesProvider = Provider<List<DailySummary>>((ref) {
   return storageService.getDailySummaries(days: 30);
 });
 
+/// Provider for weekly chart data (last 7 days)
+final weeklyChartDataProvider = Provider<WeeklyChartData>((ref) {
+  final storageService = ref.watch(storageServiceProvider);
+  final settings = ref.watch(settingsProvider);
+  // Refresh when entries change
+  ref.watch(todayEntriesProvider);
+  
+  final summaries = storageService.getDailySummaries(days: 7);
+  final goal = settings.dailyGoalMl;
+  
+  // Calculate statistics
+  final totalMl = summaries.fold(0.0, (sum, s) => sum + s.totalAmountMl);
+  final daysWithData = summaries.where((s) => s.totalAmountMl > 0).length;
+  final averageMl = daysWithData > 0 ? totalMl / daysWithData : 0.0;
+  final goalsMet = summaries.where((s) => s.goalReached).length;
+  final maxIntake = summaries.fold(0.0, (max, s) => s.totalAmountMl > max ? s.totalAmountMl : max);
+  
+  return WeeklyChartData(
+    dailySummaries: summaries.reversed.toList(), // Oldest first for chart
+    goalMl: goal,
+    averageMl: averageMl,
+    totalMl: totalMl,
+    goalsMet: goalsMet,
+    maxIntake: maxIntake,
+  );
+});
+
+/// Weekly chart data model
+class WeeklyChartData {
+  final List<DailySummary> dailySummaries;
+  final double goalMl;
+  final double averageMl;
+  final double totalMl;
+  final int goalsMet;
+  final double maxIntake;
+
+  WeeklyChartData({
+    required this.dailySummaries,
+    required this.goalMl,
+    required this.averageMl,
+    required this.totalMl,
+    required this.goalsMet,
+    required this.maxIntake,
+  });
+
+  /// Get completion rate as percentage
+  double get completionRate => dailySummaries.isNotEmpty 
+      ? (goalsMet / dailySummaries.length) * 100 
+      : 0;
+
+  /// Get the max value for chart Y-axis (goal or max intake, whichever is higher)
+  double get chartMaxY {
+    final maxValue = maxIntake > goalMl ? maxIntake : goalMl;
+    return (maxValue * 1.2).ceilToDouble(); // Add 20% padding
+  }
+}
+
 // ==================== THEME PROVIDER ====================
 
 /// Provider for app theme mode
