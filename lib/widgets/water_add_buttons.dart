@@ -173,12 +173,14 @@ class _ContainerButtonState extends ConsumerState<_ContainerButton>
     return Icons.local_drink;
   }
 
-  void _handleTap() {
+  void _handleTap() async {
     HapticFeedback.lightImpact();
-    ref.read(todayEntriesProvider.notifier).addEntry(widget.container.amountMl);
+    await ref.read(todayEntriesProvider.notifier).addEntry(widget.container.amountMl);
     
     final settings = ref.read(settingsProvider);
     final amountDisplay = widget.container.formatAmount(settings.useMetricUnits);
+    
+    if (!mounted) return;
     
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -190,11 +192,26 @@ class _ContainerButtonState extends ConsumerState<_ContainerButton>
             Text('Added ${widget.container.name} ($amountDisplay) 💧'),
           ],
         ),
-        duration: const Duration(seconds: 2),
+        duration: const Duration(seconds: 5),
         action: SnackBarAction(
           label: 'Undo',
-          onPressed: () {
-            // TODO: Implement undo
+          onPressed: () async {
+            final success = await ref.read(undoProvider.notifier).undo();
+            if (success && mounted) {
+              HapticFeedback.mediumImpact();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      Icon(Icons.undo_rounded, color: AppColors.warning, size: 20),
+                      SizedBox(width: AppDimens.paddingS),
+                      const Text('Entry removed'),
+                    ],
+                  ),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
           },
         ),
       ),
@@ -331,13 +348,15 @@ class _CustomAmountButton extends ConsumerWidget {
                   Expanded(
                     flex: 2,
                     child: FilledButton.icon(
-                      onPressed: () {
+                      onPressed: () async {
                         final value = double.tryParse(controller.text);
                         if (value != null && value > 0) {
                           final amountMl = useMetric ? value : value / 0.033814;
-                          ref.read(todayEntriesProvider.notifier).addEntry(amountMl);
+                          final displayText = '${controller.text} ${useMetric ? "ml" : "oz"}';
+                          await ref.read(todayEntriesProvider.notifier).addEntry(amountMl);
                           Navigator.pop(context);
                           
+                          ScaffoldMessenger.of(context).clearSnackBars();
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Row(
@@ -345,8 +364,30 @@ class _CustomAmountButton extends ConsumerWidget {
                                   Icon(Icons.check_circle_rounded, 
                                        color: AppColors.success, size: 20),
                                   SizedBox(width: AppDimens.paddingS),
-                                  Text('Added ${controller.text} ${useMetric ? "ml" : "oz"}'),
+                                  Text('Added $displayText 💧'),
                                 ],
+                              ),
+                              duration: const Duration(seconds: 5),
+                              action: SnackBarAction(
+                                label: 'Undo',
+                                onPressed: () async {
+                                  final success = await ref.read(undoProvider.notifier).undo();
+                                  if (success) {
+                                    HapticFeedback.mediumImpact();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Row(
+                                          children: [
+                                            Icon(Icons.undo_rounded, color: AppColors.warning, size: 20),
+                                            SizedBox(width: AppDimens.paddingS),
+                                            const Text('Entry removed'),
+                                          ],
+                                        ),
+                                        duration: const Duration(seconds: 2),
+                                      ),
+                                    );
+                                  }
+                                },
                               ),
                             ),
                           );
@@ -867,9 +908,9 @@ class LargeAddButton extends ConsumerWidget {
         ),
       ),
       child: FloatingActionButton.extended(
-        onPressed: () {
+        onPressed: () async {
           HapticFeedback.mediumImpact();
-          ref.read(todayEntriesProvider.notifier).addEntry(defaultAmount);
+          await ref.read(todayEntriesProvider.notifier).addEntry(defaultAmount);
           
           ScaffoldMessenger.of(context).clearSnackBars();
           ScaffoldMessenger.of(context).showSnackBar(
@@ -880,6 +921,28 @@ class LargeAddButton extends ConsumerWidget {
                   SizedBox(width: AppDimens.paddingS),
                   Text('Added $defaultLabel 💧'),
                 ],
+              ),
+              duration: const Duration(seconds: 5),
+              action: SnackBarAction(
+                label: 'Undo',
+                onPressed: () async {
+                  final success = await ref.read(undoProvider.notifier).undo();
+                  if (success) {
+                    HapticFeedback.mediumImpact();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Row(
+                          children: [
+                            Icon(Icons.undo_rounded, color: AppColors.warning, size: 20),
+                            SizedBox(width: AppDimens.paddingS),
+                            const Text('Entry removed'),
+                          ],
+                        ),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                },
               ),
             ),
           );

@@ -93,6 +93,9 @@ final todayEntriesProvider = StateNotifierProvider<WaterEntriesNotifier, List<Wa
 class WaterEntriesNotifier extends StateNotifier<List<WaterEntry>> {
   final StorageService _storageService;
   final Ref _ref;
+  
+  /// Track the last added entry for undo functionality
+  WaterEntry? _lastAddedEntry;
 
   WaterEntriesNotifier(this._storageService, this._ref) : super([]) {
     _loadTodayEntries();
@@ -102,25 +105,131 @@ class WaterEntriesNotifier extends StateNotifier<List<WaterEntry>> {
     state = _storageService.getTodayEntries();
   }
 
-  /// Add a new water entry
-  Future<void> addEntry(double amountMl, {String? note}) async {
-    await _storageService.addWaterEntry(amountMl, note: note);
+  /// Get the last added entry (for undo)
+  WaterEntry? get lastAddedEntry => _lastAddedEntry;
+
+  /// Add a new water entry and track it for undo
+  Future<WaterEntry> addEntry(double amountMl, {String? note}) async {
+    final entry = await _storageService.addWaterEntry(amountMl, note: note);
+    _lastAddedEntry = entry;
     _loadTodayEntries();
     
     // Update streak after adding entry
     await _storageService.updateStreak();
     _ref.read(settingsProvider.notifier).refresh();
+    
+    // Notify undo provider of new entry
+    _ref.read(undoProvider.notifier).setUndoableEntry(entry);
+    
+    return entry;
+  }
+
+  /// Undo the last added entry
+  Future<bool> undoLastEntry() async {
+    if (_lastAddedEntry == null) return false;
+    
+    await _storageService.deleteEntry(_lastAddedEntry!.id);
+    _lastAddedEntry = null;
+    _loadTodayEntries();
+    
+    // Refresh settings (streak might change)
+    _ref.read(settingsProvider.notifier).refresh();
+    
+    return true;
   }
 
   /// Delete an entry
   Future<void> deleteEntry(String id) async {
     await _storageService.deleteEntry(id);
+    // Clear last added entry if it was the one deleted
+    if (_lastAddedEntry?.id == id) {
+      _lastAddedEntry = null;
+    }
     _loadTodayEntries();
   }
 
   /// Refresh entries
   void refresh() {
     _loadTodayEntries();
+  }
+  
+  /// Clear the last added entry reference (called when undo expires)
+  void clearLastEntry() {
+    _lastAddedEntry = null;
+  }
+}
+
+// ==================== UNDO PROVIDER ====================
+
+/// State for undo functionality
+class UndoState {
+  final WaterEntry? entry;
+  final bool canUndo;
+  final DateTime? addedAt;
+
+  const UndoState({
+    this.entry,
+    this.canUndo = false,
+    this.addedAt,
+  });
+
+  UndoState copyWith({
+    WaterEntry? entry,
+    bool? canUndo,
+    DateTime? addedAt,
+  }) {
+    return UndoState(
+      entry: entry ?? this.entry,
+      canUndo: canUndo ?? this.canUndo,
+      addedAt: addedAt ?? this.addedAt,
+    );
+  }
+}
+
+/// Provider for managing undo state
+final undoProvider = StateNotifierProvider<UndoNotifier, UndoState>((ref) {
+  return UndoNotifier(ref);
+});
+
+class UndoNotifier extends StateNotifier<UndoState> {
+  final Ref _ref;
+  static const Duration undoTimeout = Duration(seconds: 10);
+
+  UndoNotifier(this._ref) : super(const UndoState());
+
+  /// Set a new undoable entry
+  void setUndoableEntry(WaterEntry entry) {
+    state = UndoState(
+      entry: entry,
+      canUndo: true,
+      addedAt: DateTime.now(),
+    );
+  }
+
+  /// Check if undo is still valid (within timeout)
+  bool get isUndoValid {
+    if (!state.canUndo || state.addedAt == null) return false;
+    return DateTime.now().difference(state.addedAt!) < undoTimeout;
+  }
+
+  /// Perform undo action
+  Future<bool> undo() async {
+    if (!isUndoValid) {
+      clearUndo();
+      return false;
+    }
+
+    final success = await _ref.read(todayEntriesProvider.notifier).undoLastEntry();
+    if (success) {
+      clearUndo();
+    }
+    return success;
+  }
+
+  /// Clear undo state
+  void clearUndo() {
+    state = const UndoState();
+    _ref.read(todayEntriesProvider.notifier).clearLastEntry();
   }
 }
 

@@ -202,8 +202,8 @@
 ## 🔧 Quality of Life
 
 ### Undo Functionality
-- [ ] Undo last water entry
-- [ ] Undo timeout (30 seconds)
+- [x] Undo last water entry ✅
+- [x] Undo timeout (10 seconds) ✅
 - [ ] Entry history with delete option
 
 ### Edit Entries
@@ -254,7 +254,7 @@
 1. ✅ Modern UI redesign
 2. ✅ Container presets
 3. ✅ Weekly chart visualization
-4. ⬜ Undo functionality
+4. ✅ Undo functionality
 
 ### Phase 2 - Engagement
 5. ⬜ Achievements system
