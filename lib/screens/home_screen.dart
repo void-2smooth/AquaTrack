@@ -7,93 +7,192 @@ import '../widgets/motivational_message.dart';
 
 /// Home screen - Main screen showing today's progress
 /// 
-/// Displays:
-/// - Circular progress bar with percentage
-/// - Quick-add buttons for water intake
-/// - Motivational messages
-/// - Current streak info
+/// Modern, rounded aesthetic with excellent UX design
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
+    final isDark = context.isDarkMode;
 
     return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: EdgeInsets.all(AppDimens.paddingXL),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: isDark
+                ? [AppColors.darkBackgroundStart, AppColors.darkBackgroundEnd]
+                : [AppColors.backgroundStart, AppColors.backgroundEnd],
+          ),
+        ),
+        child: SafeArea(
+          child: CustomScrollView(
+            physics: const BouncingScrollPhysics(),
+            slivers: [
               // Header
-              Text(
-                'Today\'s Progress',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    AppDimens.paddingXXL,
+                    AppDimens.paddingL,
+                    AppDimens.paddingXXL,
+                    AppDimens.paddingS,
+                  ),
+                  child: _buildHeader(context),
                 ),
               ),
-              SizedBox(height: AppDimens.paddingS),
-              Text(
-                _getFormattedDate(),
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+              
+              // Main Content
+              SliverPadding(
+                padding: EdgeInsets.symmetric(horizontal: AppDimens.paddingXXL),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    SizedBox(height: AppDimens.paddingXL),
+                    
+                    // Progress Card with gradient background
+                    _buildProgressCard(context, isDark),
+                    SizedBox(height: AppDimens.paddingXXL),
+                    
+                    // Motivational Message
+                    const MotivationalMessage(),
+                    SizedBox(height: AppDimens.paddingXL),
+                    
+                    // Streak Display
+                    const StreakDisplay(),
+                    SizedBox(height: AppDimens.paddingXXL),
+                    
+                    // Quick Add Section
+                    _buildQuickAddSection(context),
+                    SizedBox(height: AppDimens.paddingXL),
+                    
+                    // Daily Tip
+                    const MotivationalTip(),
+                    SizedBox(height: AppDimens.bottomNavHeight + AppDimens.paddingXXL),
+                  ]),
                 ),
               ),
-              SizedBox(height: AppDimens.paddingXXXL),
-
-              // Progress Circle
-              const WaterProgressBar(),
-              SizedBox(height: AppDimens.paddingXXXL),
-
-              // Motivational Message
-              const MotivationalMessage(),
-              SizedBox(height: AppDimens.paddingXXL),
-
-              // Streak Display
-              const StreakDisplay(),
-              SizedBox(height: AppDimens.paddingXXL),
-
-              // Quick Add Buttons
-              const WaterAddButtons(),
-              SizedBox(height: AppDimens.paddingXXL),
-
-              // Daily Tip
-              const MotivationalTip(),
-              SizedBox(height: AppDimens.bottomNavHeight), // Space for FAB
             ],
           ),
         ),
       ),
-      // Floating action button for quick add
       floatingActionButton: const LargeAddButton(),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 
+  Widget _buildHeader(BuildContext context) {
+    final theme = Theme.of(context);
+    
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _getGreeting(),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+              ),
+            ),
+            SizedBox(height: AppDimens.paddingXS),
+            Text(
+              'Stay Hydrated 💧',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        // Date badge
+        Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: AppDimens.paddingM,
+            vertical: AppDimens.paddingS,
+          ),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primaryContainer.withOpacity(0.5),
+            borderRadius: BorderRadius.circular(AppDimens.radiusCircle),
+          ),
+          child: Text(
+            _getFormattedDate(),
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProgressCard(BuildContext context, bool isDark) {
+    return Container(
+      padding: EdgeInsets.all(AppDimens.paddingXXL),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [AppColors.cardDark, AppColors.cardDark.withOpacity(0.8)]
+              : [Colors.white, Colors.white.withOpacity(0.9)],
+        ),
+        borderRadius: BorderRadius.circular(AppDimens.radiusXXL),
+        boxShadow: isDark ? [] : AppShadows.large,
+        border: isDark
+            ? Border.all(color: Colors.white.withOpacity(0.1))
+            : null,
+      ),
+      child: Column(
+        children: [
+          const WaterProgressBar(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickAddSection(BuildContext context) {
+    final theme = Theme.of(context);
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(left: AppDimens.paddingXS),
+          child: Text(
+            'Quick Add',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        SizedBox(height: AppDimens.paddingM),
+        const WaterAddButtons(),
+      ],
+    );
+  }
+
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good Morning';
+    if (hour < 17) return 'Good Afternoon';
+    return 'Good Evening';
+  }
+
   String _getFormattedDate() {
     final now = DateTime.now();
-    final weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
-    return '${weekdays[now.weekday - 1]}, ${months[now.month - 1]} ${now.day}';
+    return '${months[now.month - 1]} ${now.day}';
   }
 }
 
-/// Today's Entries List - Shows individual entries for today
-/// 
-/// Can be used as a bottom sheet or separate view
+/// Today's Entries List
 class TodayEntriesList extends ConsumerWidget {
   const TodayEntriesList({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // TODO: Implement today's entries list
-    // - Show list of all water entries for today
-    // - Allow deleting individual entries
-    // - Show timestamp and amount for each entry
-    
     return const Center(
       child: Text('Today\'s entries will appear here'),
     );

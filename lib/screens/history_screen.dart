@@ -127,7 +127,7 @@ class HistoryScreen extends ConsumerWidget {
                   icon: Icons.water_drop,
                   value: _formatAmount(averageMl, settings.useMetricUnits),
                   label: 'Daily Avg',
-                  color: AppColors.waterBlue,
+                  color: AppColors.waterLight,
                 ),
               ],
             ),

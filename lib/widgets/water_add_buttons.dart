@@ -4,107 +4,41 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/providers.dart';
 import '../theme/app_theme.dart';
 
-/// Quick-add buttons for adding water intake
-/// 
-/// Provides pre-defined amounts for quick entry plus a custom input option.
+/// Modern quick-add buttons with smooth animations
 class WaterAddButtons extends ConsumerWidget {
   const WaterAddButtons({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final quickAmounts = ref.watch(quickAddAmountsProvider);
-    final theme = Theme.of(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Quick add buttons
-        Text(
-          'Quick Add',
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
-          textAlign: TextAlign.center,
-        ),
-        SizedBox(height: AppDimens.paddingM),
-        Wrap(
-          alignment: WrapAlignment.center,
-          spacing: AppDimens.paddingM,
-          runSpacing: AppDimens.paddingM,
+        // Quick add button grid
+        Row(
           children: quickAmounts.map((amount) {
-            return _QuickAddButton(
-              label: amount.label,
-              amountMl: amount.amountMl,
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: AppDimens.paddingXS),
+                child: _QuickAddButton(
+                  label: amount.label,
+                  amountMl: amount.amountMl,
+                ),
+              ),
             );
           }).toList(),
         ),
-        SizedBox(height: AppDimens.paddingXL),
+        SizedBox(height: AppDimens.paddingL),
         // Custom amount button
-        Center(
-          child: OutlinedButton.icon(
-            onPressed: () => _showCustomAmountDialog(context, ref),
-            icon: const Icon(Icons.add),
-            label: const Text('Custom Amount'),
-          ),
-        ),
+        _CustomAmountButton(),
       ],
-    );
-  }
-
-  void _showCustomAmountDialog(BuildContext context, WidgetRef ref) {
-    final settings = ref.read(settingsProvider);
-    final controller = TextEditingController();
-    final useMetric = settings.useMetricUnits;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add Custom Amount'),
-        content: TextField(
-          controller: controller,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [
-            FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
-          ],
-          decoration: InputDecoration(
-            labelText: 'Amount',
-            suffixText: useMetric ? 'ml' : 'oz',
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final value = double.tryParse(controller.text);
-              if (value != null && value > 0) {
-                // Convert to ml if using imperial units
-                final amountMl = useMetric ? value : value / 0.033814;
-                ref.read(todayEntriesProvider.notifier).addEntry(amountMl);
-                Navigator.pop(context);
-                
-                // Show confirmation
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Added ${controller.text} ${useMetric ? "ml" : "oz"}'),
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
-              }
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
     );
   }
 }
 
-/// Individual quick-add button widget
-class _QuickAddButton extends ConsumerWidget {
+/// Individual quick-add button with modern design
+class _QuickAddButton extends ConsumerStatefulWidget {
   final String label;
   final double amountMl;
 
@@ -114,54 +48,92 @@ class _QuickAddButton extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
+  ConsumerState<_QuickAddButton> createState() => _QuickAddButtonState();
+}
 
-    return Material(
-      color: theme.colorScheme.primaryContainer,
-      borderRadius: BorderRadius.circular(AppDimens.radiusL),
-      child: InkWell(
-        onTap: () {
-          // Add haptic feedback
-          HapticFeedback.lightImpact();
-          
-          // Add water entry
-          ref.read(todayEntriesProvider.notifier).addEntry(amountMl);
-          
-          // Show confirmation snackbar
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Added $label of water 💧'),
-              duration: const Duration(seconds: 2),
-              action: SnackBarAction(
-                label: 'Undo',
-                onPressed: () {
-                  // TODO: Implement undo functionality
-                  // Need to track the last added entry ID and delete it
-                },
-              ),
-            ),
+class _QuickAddButtonState extends ConsumerState<_QuickAddButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = context.isDarkMode;
+
+    return GestureDetector(
+      onTapDown: (_) => _controller.forward(),
+      onTapUp: (_) {
+        _controller.reverse();
+        _handleTap();
+      },
+      onTapCancel: () => _controller.reverse(),
+      child: AnimatedBuilder(
+        animation: _scaleAnimation,
+        builder: (context, child) {
+          return Transform.scale(
+            scale: _scaleAnimation.value,
+            child: child,
           );
         },
-        borderRadius: BorderRadius.circular(AppDimens.radiusL),
         child: Container(
-          width: AppDimens.quickAddButtonSize,
           height: AppDimens.quickAddButtonSize,
-          padding: EdgeInsets.all(AppDimens.paddingS),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isDark
+                  ? [AppColors.cardDark, AppColors.cardDark.withOpacity(0.8)]
+                  : [Colors.white, Colors.white.withOpacity(0.95)],
+            ),
+            borderRadius: BorderRadius.circular(AppDimens.radiusL),
+            boxShadow: isDark ? [] : AppShadows.small,
+            border: Border.all(
+              color: isDark 
+                  ? Colors.white.withOpacity(0.1) 
+                  : Colors.grey.shade200,
+              width: 1,
+            ),
+          ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.water_drop,
-                color: theme.colorScheme.primary,
-                size: AppDimens.iconXL,
+              Container(
+                padding: EdgeInsets.all(AppDimens.paddingS),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.water_drop_rounded,
+                  color: AppColors.primaryLight,
+                  size: AppDimens.iconL,
+                ),
               ),
-              SizedBox(height: AppDimens.paddingXS),
+              SizedBox(height: AppDimens.paddingS),
               Text(
-                label,
+                widget.label,
                 style: theme.textTheme.labelLarge?.copyWith(
-                  color: theme.colorScheme.onPrimaryContainer,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface,
                 ),
               ),
             ],
@@ -170,37 +142,240 @@ class _QuickAddButton extends ConsumerWidget {
       ),
     );
   }
+
+  void _handleTap() {
+    HapticFeedback.lightImpact();
+    ref.read(todayEntriesProvider.notifier).addEntry(widget.amountMl);
+    
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.check_circle_rounded, color: AppColors.success, size: 20),
+            SizedBox(width: AppDimens.paddingS),
+            Text('Added ${widget.label} 💧'),
+          ],
+        ),
+        duration: const Duration(seconds: 2),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () {
+            // TODO: Implement undo
+          },
+        ),
+      ),
+    );
+  }
 }
 
-/// Large add button for prominent placement
+/// Custom amount button with modern design
+class _CustomAmountButton extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final isDark = context.isDarkMode;
+
+    return GestureDetector(
+      onTap: () => _showCustomAmountDialog(context, ref),
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          vertical: AppDimens.paddingM,
+          horizontal: AppDimens.paddingL,
+        ),
+        decoration: BoxDecoration(
+          color: isDark 
+              ? AppColors.primaryDark.withOpacity(0.15) 
+              : AppColors.primaryLight.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(AppDimens.radiusM),
+          border: Border.all(
+            color: isDark 
+                ? AppColors.primaryDark.withOpacity(0.3) 
+                : AppColors.primaryLight.withOpacity(0.3),
+            width: 1.5,
+            strokeAlign: BorderSide.strokeAlignInside,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.add_rounded,
+              color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+              size: AppDimens.iconM,
+            ),
+            SizedBox(width: AppDimens.paddingS),
+            Text(
+              'Custom Amount',
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCustomAmountDialog(BuildContext context, WidgetRef ref) {
+    final settings = ref.read(settingsProvider);
+    final controller = TextEditingController();
+    final useMetric = settings.useMetricUnits;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppDimens.radiusXXL),
+          ),
+        ),
+        child: Padding(
+          padding: EdgeInsets.all(AppDimens.paddingXXL),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              SizedBox(height: AppDimens.paddingXXL),
+              Text(
+                'Add Custom Amount',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: AppDimens.paddingXXL),
+              TextField(
+                controller: controller,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                ],
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+                decoration: InputDecoration(
+                  hintText: '0',
+                  suffixText: useMetric ? 'ml' : 'oz',
+                  suffixStyle: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppDimens.radiusL),
+                    borderSide: BorderSide.none,
+                  ),
+                  filled: true,
+                ),
+                autofocus: true,
+              ),
+              SizedBox(height: AppDimens.paddingXXL),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  SizedBox(width: AppDimens.paddingM),
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        final value = double.tryParse(controller.text);
+                        if (value != null && value > 0) {
+                          final amountMl = useMetric ? value : value / 0.033814;
+                          ref.read(todayEntriesProvider.notifier).addEntry(amountMl);
+                          Navigator.pop(context);
+                          
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Row(
+                                children: [
+                                  Icon(Icons.check_circle_rounded, 
+                                       color: AppColors.success, size: 20),
+                                  SizedBox(width: AppDimens.paddingS),
+                                  Text('Added ${controller.text} ${useMetric ? "ml" : "oz"}'),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Add Water'),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: AppDimens.paddingL),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Large floating add button
 class LargeAddButton extends ConsumerWidget {
   const LargeAddButton({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final settings = ref.watch(settingsProvider);
+    final isDark = context.isDarkMode;
     
-    // Default amount: 250ml or 8oz
     final defaultAmount = settings.useMetricUnits ? 250.0 : 236.588;
     final defaultLabel = settings.useMetricUnits ? '250ml' : '8oz';
 
-    return FloatingActionButton.extended(
-      onPressed: () {
-        HapticFeedback.mediumImpact();
-        ref.read(todayEntriesProvider.notifier).addEntry(defaultAmount);
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Added $defaultLabel of water 💧'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      },
-      icon: const Icon(Icons.add),
-      label: Text('Add $defaultLabel'),
-      backgroundColor: theme.colorScheme.primary,
-      foregroundColor: theme.colorScheme.onPrimary,
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppDimens.radiusL),
+        boxShadow: AppShadows.colored(
+          isDark ? AppColors.primaryDark : AppColors.primaryLight,
+        ),
+      ),
+      child: FloatingActionButton.extended(
+        onPressed: () {
+          HapticFeedback.mediumImpact();
+          ref.read(todayEntriesProvider.notifier).addEntry(defaultAmount);
+          
+          ScaffoldMessenger.of(context).clearSnackBars();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.check_circle_rounded, color: AppColors.success, size: 20),
+                  SizedBox(width: AppDimens.paddingS),
+                  Text('Added $defaultLabel 💧'),
+                ],
+              ),
+            ),
+          );
+        },
+        icon: const Icon(Icons.add_rounded),
+        label: Text('Add $defaultLabel'),
+      ),
     );
   }
 }
