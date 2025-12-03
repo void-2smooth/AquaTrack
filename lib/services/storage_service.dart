@@ -2,20 +2,23 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../models/water_entry.dart';
 import '../models/container.dart';
+import '../models/achievement.dart';
 
 /// Service for managing local storage using Hive
 /// 
-/// Handles all CRUD operations for water entries, user settings, and containers.
+/// Handles all CRUD operations for water entries, user settings, containers, and achievements.
 /// Uses Hive boxes for efficient local storage.
 class StorageService {
   static const String _waterEntriesBoxName = 'water_entries';
   static const String _settingsBoxName = 'user_settings';
   static const String _containersBoxName = 'containers';
+  static const String _achievementsBoxName = 'achievements';
   static const String _settingsKey = 'settings';
 
   late Box<WaterEntry> _waterEntriesBox;
   late Box<UserSettings> _settingsBox;
   late Box<WaterContainer> _containersBox;
+  late Box<UnlockedAchievement> _achievementsBox;
 
   final Uuid _uuid = const Uuid();
 
@@ -36,11 +39,15 @@ class StorageService {
     if (!Hive.isAdapterRegistered(2)) {
       Hive.registerAdapter(WaterContainerAdapter());
     }
+    if (!Hive.isAdapterRegistered(4)) {
+      Hive.registerAdapter(UnlockedAchievementAdapter());
+    }
 
     // Open boxes
     _waterEntriesBox = await Hive.openBox<WaterEntry>(_waterEntriesBoxName);
     _settingsBox = await Hive.openBox<UserSettings>(_settingsBoxName);
     _containersBox = await Hive.openBox<WaterContainer>(_containersBoxName);
+    _achievementsBox = await Hive.openBox<UnlockedAchievement>(_achievementsBoxName);
 
     // Initialize default settings if not exists
     if (_settingsBox.get(_settingsKey) == null) {
@@ -323,11 +330,76 @@ class StorageService {
     }
   }
 
+  // ==================== ACHIEVEMENTS ====================
+
+  /// Get all unlocked achievements
+  List<UnlockedAchievement> getUnlockedAchievements() {
+    return _achievementsBox.values.toList();
+  }
+
+  /// Check if an achievement is unlocked
+  bool isAchievementUnlocked(String achievementId) {
+    return _achievementsBox.values.any((a) => a.achievementId == achievementId);
+  }
+
+  /// Unlock an achievement
+  Future<UnlockedAchievement?> unlockAchievement(String achievementId) async {
+    // Don't unlock if already unlocked
+    if (isAchievementUnlocked(achievementId)) {
+      return null;
+    }
+
+    final unlocked = UnlockedAchievement(
+      achievementId: achievementId,
+      unlockedAt: DateTime.now(),
+      seen: false,
+    );
+
+    await _achievementsBox.put(achievementId, unlocked);
+    return unlocked;
+  }
+
+  /// Mark an achievement as seen
+  Future<void> markAchievementSeen(String achievementId) async {
+    final existing = _achievementsBox.get(achievementId);
+    if (existing != null) {
+      final updated = existing.copyWith(seen: true);
+      await _achievementsBox.put(achievementId, updated);
+    }
+  }
+
+  /// Mark all achievements as seen
+  Future<void> markAllAchievementsSeen() async {
+    for (final key in _achievementsBox.keys) {
+      final existing = _achievementsBox.get(key);
+      if (existing != null && !existing.seen) {
+        final updated = existing.copyWith(seen: true);
+        await _achievementsBox.put(key, updated);
+      }
+    }
+  }
+
+  /// Get unseen achievements count
+  int getUnseenAchievementsCount() {
+    return _achievementsBox.values.where((a) => !a.seen).length;
+  }
+
+  /// Get total water logged (all time) in ml
+  double getTotalWaterLogged() {
+    return _waterEntriesBox.values.fold(0.0, (sum, entry) => sum + entry.amountMl);
+  }
+
+  /// Get total number of water entries
+  int getTotalEntryCount() {
+    return _waterEntriesBox.length;
+  }
+
   /// Clear all data (for testing or reset)
   Future<void> clearAllData() async {
     await _waterEntriesBox.clear();
     await _settingsBox.clear();
     await _containersBox.clear();
+    await _achievementsBox.clear();
     await _settingsBox.put(_settingsKey, UserSettings());
     await _initializeDefaultContainers();
   }

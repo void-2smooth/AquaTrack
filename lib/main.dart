@@ -2,12 +2,16 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:confetti/confetti.dart';
+import 'dart:math';
 import 'services/storage_service.dart';
 import 'services/notification_service.dart';
 import 'providers/providers.dart';
 import 'screens/home_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/achievements_screen.dart';
+import 'widgets/celebration.dart';
 import 'theme/app_theme.dart';
 
 /// AquaTrack - Daily Water Reminder App
@@ -79,20 +83,99 @@ class MainNavigationScreen extends ConsumerStatefulWidget {
 
 class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
   int _selectedIndex = 0;
+  late ConfettiController _confettiController;
 
   // List of screens for navigation
   final List<Widget> _screens = const [
     HomeScreen(),
     HistoryScreen(),
+    AchievementsScreen(),
     SettingsScreen(),
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _confettiController = ConfettiController(
+      duration: const Duration(seconds: 3),
+    );
+  }
+
+  @override
+  void dispose() {
+    _confettiController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final celebrationState = ref.watch(celebrationProvider);
+    
+    // Listen for goal reached celebration
+    ref.listen(celebrationProvider, (previous, next) {
+      if (next.showGoalCelebration && !(previous?.showGoalCelebration ?? false)) {
+        _confettiController.play();
+      }
+      if (next.showAchievementCelebration && !(previous?.showAchievementCelebration ?? false)) {
+        _confettiController.play();
+      }
+    });
+
+    // Get unseen achievements count for badge
+    final unseenCount = ref.read(achievementsProvider.notifier).unseenCount;
+
     return Scaffold(
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: AppDimens.animationNormal),
-        child: _screens[_selectedIndex],
+      body: Stack(
+        children: [
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: AppDimens.animationNormal),
+            child: _screens[_selectedIndex],
+          ),
+          
+          // Confetti overlay
+          Align(
+            alignment: Alignment.topCenter,
+            child: ConfettiWidget(
+              confettiController: _confettiController,
+              blastDirection: pi / 2,
+              maxBlastForce: 5,
+              minBlastForce: 2,
+              emissionFrequency: 0.05,
+              numberOfParticles: 25,
+              gravity: 0.2,
+              shouldLoop: false,
+              colors: const [
+                AppColors.waterLight,
+                AppColors.waterMedium,
+                AppColors.success,
+                AppColors.streakGold,
+                Color(0xFFFF6B6B),
+                Color(0xFFAB47BC),
+              ],
+            ),
+          ),
+          
+          // Goal celebration banner
+          if (celebrationState.showGoalCelebration)
+            SafeArea(
+              child: GoalReachedBanner(
+                onDismiss: () {
+                  ref.read(celebrationProvider.notifier).dismissGoalCelebration();
+                },
+              ),
+            ),
+          
+          // Achievement celebration popup
+          if (celebrationState.showAchievementCelebration && celebrationState.achievement != null)
+            Center(
+              child: AchievementUnlockPopup(
+                achievement: celebrationState.achievement!,
+                onDismiss: () {
+                  ref.read(celebrationProvider.notifier).dismissAchievementCelebration();
+                },
+              ),
+            ),
+        ],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
@@ -101,18 +184,31 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
             _selectedIndex = index;
           });
         },
-        destinations: const [
-          NavigationDestination(
+        destinations: [
+          const NavigationDestination(
             icon: Icon(Icons.water_drop_outlined),
             selectedIcon: Icon(Icons.water_drop),
             label: 'Today',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.history_outlined),
             selectedIcon: Icon(Icons.history),
             label: 'History',
           ),
           NavigationDestination(
+            icon: Badge(
+              isLabelVisible: unseenCount > 0,
+              label: Text('$unseenCount'),
+              child: const Icon(Icons.emoji_events_outlined),
+            ),
+            selectedIcon: Badge(
+              isLabelVisible: unseenCount > 0,
+              label: Text('$unseenCount'),
+              child: const Icon(Icons.emoji_events),
+            ),
+            label: 'Trophies',
+          ),
+          const NavigationDestination(
             icon: Icon(Icons.settings_outlined),
             selectedIcon: Icon(Icons.settings),
             label: 'Settings',

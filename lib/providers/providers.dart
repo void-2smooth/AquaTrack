@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/water_entry.dart';
 import '../models/container.dart';
+import '../models/achievement.dart';
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
 
@@ -110,6 +111,11 @@ class WaterEntriesNotifier extends StateNotifier<List<WaterEntry>> {
 
   /// Add a new water entry and track it for undo
   Future<WaterEntry> addEntry(double amountMl, {String? note}) async {
+    // Get current total before adding
+    final previousTotal = _ref.read(todayTotalProvider);
+    final goal = _ref.read(settingsProvider).dailyGoalMl;
+    final wasGoalReached = previousTotal >= goal;
+    
     final entry = await _storageService.addWaterEntry(amountMl, note: note);
     _lastAddedEntry = entry;
     _loadTodayEntries();
@@ -120,6 +126,18 @@ class WaterEntriesNotifier extends StateNotifier<List<WaterEntry>> {
     
     // Notify undo provider of new entry
     _ref.read(undoProvider.notifier).setUndoableEntry(entry);
+    
+    // Check if goal was just reached
+    final newTotal = state.fold(0.0, (sum, e) => sum + e.amountMl);
+    if (!wasGoalReached && newTotal >= goal) {
+      _ref.read(celebrationProvider.notifier).triggerGoalCelebration();
+    }
+    
+    // Check and unlock achievements
+    final newAchievements = await _ref.read(achievementsProvider.notifier).checkAndUnlockAchievements();
+    if (newAchievements.isNotEmpty) {
+      _ref.read(celebrationProvider.notifier).triggerAchievementCelebration(newAchievements.first);
+    }
     
     return entry;
   }
@@ -458,4 +476,297 @@ class QuickAddAmount {
   final double amountMl;
 
   QuickAddAmount({required this.label, required this.amountMl});
+}
+
+// ==================== ACHIEVEMENTS PROVIDERS ====================
+
+/// Provider for achievements state
+final achievementsProvider = StateNotifierProvider<AchievementsNotifier, AchievementsState>((ref) {
+  final storageService = ref.watch(storageServiceProvider);
+  return AchievementsNotifier(storageService, ref);
+});
+
+/// State class for achievements
+class AchievementsState {
+  final List<UnlockedAchievement> unlockedAchievements;
+  final AchievementDefinition? newlyUnlocked;
+  final bool showingCelebration;
+
+  const AchievementsState({
+    this.unlockedAchievements = const [],
+    this.newlyUnlocked,
+    this.showingCelebration = false,
+  });
+
+  AchievementsState copyWith({
+    List<UnlockedAchievement>? unlockedAchievements,
+    AchievementDefinition? newlyUnlocked,
+    bool? showingCelebration,
+    bool clearNewlyUnlocked = false,
+  }) {
+    return AchievementsState(
+      unlockedAchievements: unlockedAchievements ?? this.unlockedAchievements,
+      newlyUnlocked: clearNewlyUnlocked ? null : (newlyUnlocked ?? this.newlyUnlocked),
+      showingCelebration: showingCelebration ?? this.showingCelebration,
+    );
+  }
+
+  int get totalUnlocked => unlockedAchievements.length;
+  int get totalAchievements => Achievements.all.length;
+  double get progressPercentage => totalAchievements > 0 
+      ? (totalUnlocked / totalAchievements) * 100 
+      : 0;
+
+  bool isUnlocked(String achievementId) {
+    return unlockedAchievements.any((a) => a.achievementId == achievementId);
+  }
+}
+
+class AchievementsNotifier extends StateNotifier<AchievementsState> {
+  final StorageService _storageService;
+  final Ref _ref;
+
+  AchievementsNotifier(this._storageService, this._ref) : super(const AchievementsState()) {
+    _loadAchievements();
+  }
+
+  void _loadAchievements() {
+    final unlocked = _storageService.getUnlockedAchievements();
+    state = state.copyWith(unlockedAchievements: unlocked);
+  }
+
+  /// Check and unlock achievements based on current stats
+  Future<List<AchievementDefinition>> checkAndUnlockAchievements() async {
+    final newlyUnlocked = <AchievementDefinition>[];
+    
+    final settings = _ref.read(settingsProvider);
+    final todayTotal = _ref.read(todayTotalProvider);
+    final entries = _ref.read(todayEntriesProvider);
+    final totalLogged = _storageService.getTotalWaterLogged();
+    final entryCount = _storageService.getTotalEntryCount();
+    final streak = settings.currentStreak;
+    final goalMl = settings.dailyGoalMl;
+
+    // Check first drop
+    if (entryCount >= 1) {
+      final unlocked = await _tryUnlock(Achievements.firstDrop);
+      if (unlocked != null) newlyUnlocked.add(unlocked);
+    }
+
+    // Check hydration hero (first goal completion)
+    if (todayTotal >= goalMl) {
+      final unlocked = await _tryUnlock(Achievements.hydrationHero);
+      if (unlocked != null) newlyUnlocked.add(unlocked);
+    }
+
+    // Check overachiever (150% of goal)
+    if (todayTotal >= goalMl * 1.5) {
+      final unlocked = await _tryUnlock(Achievements.overachiever);
+      if (unlocked != null) newlyUnlocked.add(unlocked);
+    }
+
+    // Check hydration master (100L total)
+    if (totalLogged >= 100000) {
+      final unlocked = await _tryUnlock(Achievements.hydrationMaster);
+      if (unlocked != null) newlyUnlocked.add(unlocked);
+    }
+
+    // Check streak achievements
+    if (streak >= 3) {
+      final unlocked = await _tryUnlock(Achievements.streak3);
+      if (unlocked != null) newlyUnlocked.add(unlocked);
+    }
+    if (streak >= 7) {
+      final unlocked = await _tryUnlock(Achievements.streak7);
+      if (unlocked != null) newlyUnlocked.add(unlocked);
+    }
+    if (streak >= 14) {
+      final unlocked = await _tryUnlock(Achievements.streak14);
+      if (unlocked != null) newlyUnlocked.add(unlocked);
+    }
+    if (streak >= 30) {
+      final unlocked = await _tryUnlock(Achievements.streak30);
+      if (unlocked != null) newlyUnlocked.add(unlocked);
+    }
+    if (streak >= 100) {
+      final unlocked = await _tryUnlock(Achievements.streak100);
+      if (unlocked != null) newlyUnlocked.add(unlocked);
+    }
+
+    // Check time-based achievements
+    if (entries.isNotEmpty) {
+      final now = DateTime.now();
+      final hasEarlyEntry = entries.any((e) => e.timestamp.hour < 7);
+      final hasLateEntry = entries.any((e) => e.timestamp.hour >= 22);
+      final completedBeforeNoon = todayTotal >= goalMl && now.hour < 12;
+
+      if (hasEarlyEntry) {
+        final unlocked = await _tryUnlock(Achievements.earlyBird);
+        if (unlocked != null) newlyUnlocked.add(unlocked);
+      }
+      if (hasLateEntry) {
+        final unlocked = await _tryUnlock(Achievements.nightOwl);
+        if (unlocked != null) newlyUnlocked.add(unlocked);
+      }
+      if (completedBeforeNoon) {
+        final unlocked = await _tryUnlock(Achievements.speedDrinker);
+        if (unlocked != null) newlyUnlocked.add(unlocked);
+      }
+    }
+
+    // Check milestone achievements
+    if (entryCount >= 10) {
+      final unlocked = await _tryUnlock(Achievements.logs10);
+      if (unlocked != null) newlyUnlocked.add(unlocked);
+    }
+    if (entryCount >= 100) {
+      final unlocked = await _tryUnlock(Achievements.logs100);
+      if (unlocked != null) newlyUnlocked.add(unlocked);
+    }
+    if (entryCount >= 500) {
+      final unlocked = await _tryUnlock(Achievements.logs500);
+      if (unlocked != null) newlyUnlocked.add(unlocked);
+    }
+    if (entryCount >= 1000) {
+      final unlocked = await _tryUnlock(Achievements.logs1000);
+      if (unlocked != null) newlyUnlocked.add(unlocked);
+    }
+
+    // Check perfect week/month based on streak
+    if (streak >= 7) {
+      final unlocked = await _tryUnlock(Achievements.perfectWeek);
+      if (unlocked != null) newlyUnlocked.add(unlocked);
+    }
+    if (streak >= 30) {
+      final unlocked = await _tryUnlock(Achievements.perfectMonth);
+      if (unlocked != null) newlyUnlocked.add(unlocked);
+    }
+
+    // Update state with first newly unlocked achievement
+    if (newlyUnlocked.isNotEmpty) {
+      _loadAchievements();
+      state = state.copyWith(
+        newlyUnlocked: newlyUnlocked.first,
+        showingCelebration: true,
+      );
+    }
+
+    return newlyUnlocked;
+  }
+
+  Future<AchievementDefinition?> _tryUnlock(AchievementDefinition achievement) async {
+    if (state.isUnlocked(achievement.id)) return null;
+    
+    final unlocked = await _storageService.unlockAchievement(achievement.id);
+    if (unlocked != null) {
+      return achievement;
+    }
+    return null;
+  }
+
+  /// Clear the newly unlocked achievement (after showing celebration)
+  void clearNewlyUnlocked() {
+    state = state.copyWith(clearNewlyUnlocked: true, showingCelebration: false);
+  }
+
+  /// Mark achievement as seen
+  Future<void> markSeen(String achievementId) async {
+    await _storageService.markAchievementSeen(achievementId);
+    _loadAchievements();
+  }
+
+  /// Mark all as seen
+  Future<void> markAllSeen() async {
+    await _storageService.markAllAchievementsSeen();
+    _loadAchievements();
+  }
+
+  /// Get unseen count
+  int get unseenCount => _storageService.getUnseenAchievementsCount();
+}
+
+// ==================== CELEBRATION PROVIDER ====================
+
+/// Celebration state
+class CelebrationState {
+  final bool showGoalCelebration;
+  final bool showAchievementCelebration;
+  final AchievementDefinition? achievement;
+  final int? streakMilestone;
+
+  const CelebrationState({
+    this.showGoalCelebration = false,
+    this.showAchievementCelebration = false,
+    this.achievement,
+    this.streakMilestone,
+  });
+
+  CelebrationState copyWith({
+    bool? showGoalCelebration,
+    bool? showAchievementCelebration,
+    AchievementDefinition? achievement,
+    int? streakMilestone,
+    bool clearAchievement = false,
+    bool clearStreak = false,
+  }) {
+    return CelebrationState(
+      showGoalCelebration: showGoalCelebration ?? this.showGoalCelebration,
+      showAchievementCelebration: showAchievementCelebration ?? this.showAchievementCelebration,
+      achievement: clearAchievement ? null : (achievement ?? this.achievement),
+      streakMilestone: clearStreak ? null : (streakMilestone ?? this.streakMilestone),
+    );
+  }
+}
+
+final celebrationProvider = StateNotifierProvider<CelebrationNotifier, CelebrationState>((ref) {
+  return CelebrationNotifier();
+});
+
+class CelebrationNotifier extends StateNotifier<CelebrationState> {
+  bool _hasShownGoalCelebrationToday = false;
+
+  CelebrationNotifier() : super(const CelebrationState());
+
+  /// Trigger goal reached celebration
+  void triggerGoalCelebration() {
+    if (_hasShownGoalCelebrationToday) return;
+    _hasShownGoalCelebrationToday = true;
+    state = state.copyWith(showGoalCelebration: true);
+  }
+
+  /// Trigger achievement celebration
+  void triggerAchievementCelebration(AchievementDefinition achievement) {
+    state = state.copyWith(
+      showAchievementCelebration: true,
+      achievement: achievement,
+    );
+  }
+
+  /// Trigger streak milestone celebration
+  void triggerStreakCelebration(int days) {
+    state = state.copyWith(streakMilestone: days);
+  }
+
+  /// Dismiss goal celebration
+  void dismissGoalCelebration() {
+    state = state.copyWith(showGoalCelebration: false);
+  }
+
+  /// Dismiss achievement celebration
+  void dismissAchievementCelebration() {
+    state = state.copyWith(
+      showAchievementCelebration: false,
+      clearAchievement: true,
+    );
+  }
+
+  /// Dismiss streak celebration
+  void dismissStreakCelebration() {
+    state = state.copyWith(clearStreak: true);
+  }
+
+  /// Reset daily flags (call at midnight or app start)
+  void resetDaily() {
+    _hasShownGoalCelebrationToday = false;
+  }
 }
