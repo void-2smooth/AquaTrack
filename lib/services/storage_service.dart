@@ -1,18 +1,21 @@
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../models/water_entry.dart';
+import '../models/container.dart';
 
 /// Service for managing local storage using Hive
 /// 
-/// Handles all CRUD operations for water entries and user settings.
+/// Handles all CRUD operations for water entries, user settings, and containers.
 /// Uses Hive boxes for efficient local storage.
 class StorageService {
   static const String _waterEntriesBoxName = 'water_entries';
   static const String _settingsBoxName = 'user_settings';
+  static const String _containersBoxName = 'containers';
   static const String _settingsKey = 'settings';
 
   late Box<WaterEntry> _waterEntriesBox;
   late Box<UserSettings> _settingsBox;
+  late Box<WaterContainer> _containersBox;
 
   final Uuid _uuid = const Uuid();
 
@@ -30,14 +33,31 @@ class StorageService {
     if (!Hive.isAdapterRegistered(1)) {
       Hive.registerAdapter(UserSettingsAdapter());
     }
+    if (!Hive.isAdapterRegistered(2)) {
+      Hive.registerAdapter(WaterContainerAdapter());
+    }
 
     // Open boxes
     _waterEntriesBox = await Hive.openBox<WaterEntry>(_waterEntriesBoxName);
     _settingsBox = await Hive.openBox<UserSettings>(_settingsBoxName);
+    _containersBox = await Hive.openBox<WaterContainer>(_containersBoxName);
 
     // Initialize default settings if not exists
     if (_settingsBox.get(_settingsKey) == null) {
       await _settingsBox.put(_settingsKey, UserSettings());
+    }
+
+    // Initialize default containers if none exist
+    if (_containersBox.isEmpty) {
+      await _initializeDefaultContainers();
+    }
+  }
+
+  /// Initialize default containers for new users
+  Future<void> _initializeDefaultContainers() async {
+    final defaults = DefaultContainers.getDefaults();
+    for (final container in defaults) {
+      await _containersBox.put(container.id, container);
     }
   }
 
@@ -54,8 +74,8 @@ class StorageService {
     
     await _waterEntriesBox.put(entry.id, entry);
     
-    // TODO: Update streak calculation here
-    // Call _updateStreak() after adding entry
+    // Update streak after adding entry
+    await updateStreak();
     
     return entry;
   }
@@ -124,6 +144,73 @@ class StorageService {
     return summaries;
   }
 
+  // ==================== CONTAINERS ====================
+
+  /// Get all saved containers
+  List<WaterContainer> getAllContainers() {
+    return _containersBox.values.toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+  }
+
+  /// Get only default/quick-add containers
+  List<WaterContainer> getQuickAddContainers() {
+    return _containersBox.values
+        .where((c) => c.isDefault)
+        .toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+  }
+
+  /// Get a container by ID
+  WaterContainer? getContainer(String id) {
+    return _containersBox.get(id);
+  }
+
+  /// Add a new container
+  Future<WaterContainer> addContainer({
+    required String name,
+    required double amountMl,
+    String icon = 'local_drink',
+    int colorValue = 0xFF00B4D8,
+    bool isDefault = true,
+  }) async {
+    final container = WaterContainer(
+      id: _uuid.v4(),
+      name: name,
+      amountMl: amountMl,
+      icon: icon,
+      colorValue: colorValue,
+      isDefault: isDefault,
+    );
+    
+    await _containersBox.put(container.id, container);
+    return container;
+  }
+
+  /// Update an existing container
+  Future<void> updateContainer(WaterContainer container) async {
+    await _containersBox.put(container.id, container);
+  }
+
+  /// Delete a container
+  Future<void> deleteContainer(String id) async {
+    await _containersBox.delete(id);
+  }
+
+  /// Toggle container as quick-add default
+  Future<void> toggleContainerDefault(String id, bool isDefault) async {
+    final container = _containersBox.get(id);
+    if (container != null) {
+      final updated = container.copyWith(isDefault: isDefault);
+      await _containersBox.put(id, updated);
+    }
+  }
+
+  /// Reset containers to defaults
+  Future<void> resetContainersToDefault() async {
+    await _containersBox.clear();
+    await _initializeDefaultContainers();
+  }
+
   // ==================== USER SETTINGS ====================
 
   /// Get user settings
@@ -187,12 +274,6 @@ class StorageService {
   // ==================== STREAK MANAGEMENT ====================
 
   /// Update streak based on current activity
-  /// 
-  /// TODO: Implement full streak logic:
-  /// 1. Check if today's goal was reached
-  /// 2. Check if yesterday's goal was reached (for streak continuity)
-  /// 3. Update currentStreak and longestStreak accordingly
-  /// 4. Store lastActiveDate
   Future<void> updateStreak() async {
     final settings = getSettings();
     final todayTotal = getTodayTotalMl();
@@ -206,7 +287,6 @@ class StorageService {
       int newStreak = settings.currentStreak;
 
       if (lastActive == null) {
-        // First time reaching goal
         newStreak = 1;
       } else {
         final lastActiveDay = DateTime(
@@ -219,10 +299,8 @@ class StorageService {
         if (difference == 0) {
           // Same day, streak unchanged
         } else if (difference == 1) {
-          // Consecutive day, increment streak
           newStreak = settings.currentStreak + 1;
         } else {
-          // Streak broken, reset to 1
           newStreak = 1;
         }
       }
@@ -249,7 +327,8 @@ class StorageService {
   Future<void> clearAllData() async {
     await _waterEntriesBox.clear();
     await _settingsBox.clear();
+    await _containersBox.clear();
     await _settingsBox.put(_settingsKey, UserSettings());
+    await _initializeDefaultContainers();
   }
 }
-

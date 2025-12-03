@@ -1,57 +1,67 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/container.dart';
 import '../providers/providers.dart';
 import '../theme/app_theme.dart';
 
-/// Modern quick-add buttons with smooth animations
+/// Modern quick-add buttons using saved container presets
 class WaterAddButtons extends ConsumerWidget {
   const WaterAddButtons({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final quickAmounts = ref.watch(quickAddAmountsProvider);
+    final containers = ref.watch(quickAddContainersProvider);
+    final settings = ref.watch(settingsProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Quick add button grid
+        // Container preset buttons
+        if (containers.isNotEmpty) ...[
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: AppDimens.paddingM,
+            runSpacing: AppDimens.paddingM,
+            children: containers.map((container) {
+              return _ContainerButton(
+                container: container,
+                useMetric: settings.useMetricUnits,
+              );
+            }).toList(),
+          ),
+          SizedBox(height: AppDimens.paddingL),
+        ],
+        // Action buttons row
         Row(
-          children: quickAmounts.map((amount) {
-            return Expanded(
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: AppDimens.paddingXS),
-                child: _QuickAddButton(
-                  label: amount.label,
-                  amountMl: amount.amountMl,
-                ),
-              ),
-            );
-          }).toList(),
+          children: [
+            Expanded(
+              child: _CustomAmountButton(),
+            ),
+            SizedBox(width: AppDimens.paddingM),
+            _ManageContainersButton(),
+          ],
         ),
-        SizedBox(height: AppDimens.paddingL),
-        // Custom amount button
-        _CustomAmountButton(),
       ],
     );
   }
 }
 
-/// Individual quick-add button with modern design
-class _QuickAddButton extends ConsumerStatefulWidget {
-  final String label;
-  final double amountMl;
+/// Individual container preset button with modern design
+class _ContainerButton extends ConsumerStatefulWidget {
+  final WaterContainer container;
+  final bool useMetric;
 
-  const _QuickAddButton({
-    required this.label,
-    required this.amountMl,
+  const _ContainerButton({
+    required this.container,
+    required this.useMetric,
   });
 
   @override
-  ConsumerState<_QuickAddButton> createState() => _QuickAddButtonState();
+  ConsumerState<_ContainerButton> createState() => _ContainerButtonState();
 }
 
-class _QuickAddButtonState extends ConsumerState<_QuickAddButton>
+class _ContainerButtonState extends ConsumerState<_ContainerButton>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
@@ -78,6 +88,7 @@ class _QuickAddButtonState extends ConsumerState<_QuickAddButton>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = context.isDarkMode;
+    final containerColor = Color(widget.container.colorValue);
 
     return GestureDetector(
       onTapDown: (_) => _controller.forward(),
@@ -95,7 +106,8 @@ class _QuickAddButtonState extends ConsumerState<_QuickAddButton>
           );
         },
         child: Container(
-          height: AppDimens.quickAddButtonSize,
+          width: AppDimens.quickAddButtonSize,
+          height: AppDimens.quickAddButtonSize + 8,
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
@@ -107,33 +119,43 @@ class _QuickAddButtonState extends ConsumerState<_QuickAddButton>
             borderRadius: BorderRadius.circular(AppDimens.radiusL),
             boxShadow: isDark ? [] : AppShadows.small,
             border: Border.all(
-              color: isDark 
-                  ? Colors.white.withOpacity(0.1) 
-                  : Colors.grey.shade200,
-              width: 1,
+              color: containerColor.withOpacity(0.3),
+              width: 1.5,
             ),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              // Icon with colored background
               Container(
                 padding: EdgeInsets.all(AppDimens.paddingS),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryLight.withOpacity(0.1),
+                  color: containerColor.withOpacity(0.15),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  Icons.water_drop_rounded,
-                  color: AppColors.primaryLight,
+                  _getIconData(widget.container.icon),
+                  color: containerColor,
                   size: AppDimens.iconL,
                 ),
               ),
-              SizedBox(height: AppDimens.paddingS),
+              SizedBox(height: AppDimens.paddingXS),
+              // Container name
               Text(
-                widget.label,
-                style: theme.textTheme.labelLarge?.copyWith(
+                widget.container.name,
+                style: theme.textTheme.labelMedium?.copyWith(
                   fontWeight: FontWeight.w600,
                   color: theme.colorScheme.onSurface,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              // Amount
+              Text(
+                widget.container.formatAmount(widget.useMetric),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: containerColor,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
@@ -143,9 +165,20 @@ class _QuickAddButtonState extends ConsumerState<_QuickAddButton>
     );
   }
 
+  IconData _getIconData(String iconName) {
+    final codePoint = ContainerIcons.iconCodePoints[iconName];
+    if (codePoint != null) {
+      return IconData(codePoint, fontFamily: 'MaterialIcons');
+    }
+    return Icons.local_drink;
+  }
+
   void _handleTap() {
     HapticFeedback.lightImpact();
-    ref.read(todayEntriesProvider.notifier).addEntry(widget.amountMl);
+    ref.read(todayEntriesProvider.notifier).addEntry(widget.container.amountMl);
+    
+    final settings = ref.read(settingsProvider);
+    final amountDisplay = widget.container.formatAmount(settings.useMetricUnits);
     
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -154,7 +187,7 @@ class _QuickAddButtonState extends ConsumerState<_QuickAddButton>
           children: [
             Icon(Icons.check_circle_rounded, color: AppColors.success, size: 20),
             SizedBox(width: AppDimens.paddingS),
-            Text('Added ${widget.label} 💧'),
+            Text('Added ${widget.container.name} ($amountDisplay) 💧'),
           ],
         ),
         duration: const Duration(seconds: 2),
@@ -169,7 +202,7 @@ class _QuickAddButtonState extends ConsumerState<_QuickAddButton>
   }
 }
 
-/// Custom amount button with modern design
+/// Custom amount button
 class _CustomAmountButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -177,7 +210,7 @@ class _CustomAmountButton extends ConsumerWidget {
     final isDark = context.isDarkMode;
 
     return GestureDetector(
-      onTap: () => _showCustomAmountDialog(context, ref),
+      onTap: () => _showCustomAmountSheet(context, ref),
       child: Container(
         padding: EdgeInsets.symmetric(
           vertical: AppDimens.paddingM,
@@ -193,7 +226,6 @@ class _CustomAmountButton extends ConsumerWidget {
                 ? AppColors.primaryDark.withOpacity(0.3) 
                 : AppColors.primaryLight.withOpacity(0.3),
             width: 1.5,
-            strokeAlign: BorderSide.strokeAlignInside,
           ),
         ),
         child: Row(
@@ -206,7 +238,7 @@ class _CustomAmountButton extends ConsumerWidget {
             ),
             SizedBox(width: AppDimens.paddingS),
             Text(
-              'Custom Amount',
+              'Custom',
               style: theme.textTheme.labelLarge?.copyWith(
                 color: isDark ? AppColors.primaryDark : AppColors.primaryLight,
                 fontWeight: FontWeight.w600,
@@ -218,7 +250,7 @@ class _CustomAmountButton extends ConsumerWidget {
     );
   }
 
-  void _showCustomAmountDialog(BuildContext context, WidgetRef ref) {
+  void _showCustomAmountSheet(BuildContext context, WidgetRef ref) {
     final settings = ref.read(settingsProvider);
     final controller = TextEditingController();
     final useMetric = settings.useMetricUnits;
@@ -243,7 +275,6 @@ class _CustomAmountButton extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Handle
               Center(
                 child: Container(
                   width: 40,
@@ -322,7 +353,7 @@ class _CustomAmountButton extends ConsumerWidget {
                         }
                       },
                       icon: const Icon(Icons.add_rounded),
-                      label: const Text('Add Water'),
+                      label: const Text('Add'),
                     ),
                   ),
                 ],
@@ -333,6 +364,486 @@ class _CustomAmountButton extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+/// Button to manage containers
+class _ManageContainersButton extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final isDark = context.isDarkMode;
+
+    return GestureDetector(
+      onTap: () => _showContainerManager(context, ref),
+      child: Container(
+        padding: EdgeInsets.all(AppDimens.paddingM),
+        decoration: BoxDecoration(
+          color: isDark 
+              ? Colors.white.withOpacity(0.1) 
+              : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(AppDimens.radiusM),
+        ),
+        child: Icon(
+          Icons.edit_rounded,
+          color: theme.colorScheme.onSurface.withOpacity(0.6),
+          size: AppDimens.iconM,
+        ),
+      ),
+    );
+  }
+
+  void _showContainerManager(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const ContainerManagerSheet(),
+    );
+  }
+}
+
+/// Container management bottom sheet
+class ContainerManagerSheet extends ConsumerWidget {
+  const ContainerManagerSheet({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final containers = ref.watch(containersProvider);
+    final settings = ref.watch(settingsProvider);
+    final theme = Theme.of(context);
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) => Container(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppDimens.radiusXXL),
+          ),
+        ),
+        child: Column(
+          children: [
+            // Handle
+            Padding(
+              padding: EdgeInsets.all(AppDimens.paddingM),
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            // Header
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: AppDimens.paddingXXL),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'My Containers',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => _showAddContainerDialog(context, ref),
+                    icon: Container(
+                      padding: EdgeInsets.all(AppDimens.paddingS),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.add,
+                        color: theme.colorScheme.onPrimary,
+                        size: AppDimens.iconM,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: AppDimens.paddingM),
+            // Container list
+            Expanded(
+              child: containers.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.local_drink_outlined,
+                            size: 64,
+                            color: theme.colorScheme.onSurface.withOpacity(0.3),
+                          ),
+                          SizedBox(height: AppDimens.paddingL),
+                          Text(
+                            'No containers yet',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: theme.colorScheme.onSurface.withOpacity(0.6),
+                            ),
+                          ),
+                          SizedBox(height: AppDimens.paddingS),
+                          TextButton.icon(
+                            onPressed: () => _showAddContainerDialog(context, ref),
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add Container'),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: scrollController,
+                      padding: EdgeInsets.symmetric(horizontal: AppDimens.paddingL),
+                      itemCount: containers.length,
+                      itemBuilder: (context, index) {
+                        final container = containers[index];
+                        return _ContainerListItem(
+                          container: container,
+                          useMetric: settings.useMetricUnits,
+                          onEdit: () => _showEditContainerDialog(context, ref, container),
+                          onDelete: () => _confirmDelete(context, ref, container),
+                          onToggleDefault: (value) {
+                            ref.read(containersProvider.notifier)
+                                .toggleDefault(container.id, value);
+                          },
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAddContainerDialog(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (context) => ContainerEditorDialog(
+        onSave: (name, amount, icon, color) async {
+          await ref.read(containersProvider.notifier).addContainer(
+            name: name,
+            amountMl: amount,
+            icon: icon,
+            colorValue: color,
+          );
+          if (context.mounted) Navigator.pop(context);
+        },
+      ),
+    );
+  }
+
+  void _showEditContainerDialog(BuildContext context, WidgetRef ref, WaterContainer container) {
+    showDialog(
+      context: context,
+      builder: (context) => ContainerEditorDialog(
+        container: container,
+        onSave: (name, amount, icon, color) async {
+          final updated = container.copyWith(
+            name: name,
+            amountMl: amount,
+            icon: icon,
+            colorValue: color,
+          );
+          await ref.read(containersProvider.notifier).updateContainer(updated);
+          if (context.mounted) Navigator.pop(context);
+        },
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, WidgetRef ref, WaterContainer container) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Container?'),
+        content: Text('Are you sure you want to delete "${container.name}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              ref.read(containersProvider.notifier).deleteContainer(container.id);
+              Navigator.pop(context);
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Container list item
+class _ContainerListItem extends StatelessWidget {
+  final WaterContainer container;
+  final bool useMetric;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final ValueChanged<bool> onToggleDefault;
+
+  const _ContainerListItem({
+    required this.container,
+    required this.useMetric,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onToggleDefault,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final containerColor = Color(container.colorValue);
+
+    return Card(
+      margin: EdgeInsets.only(bottom: AppDimens.paddingS),
+      child: ListTile(
+        leading: Container(
+          padding: EdgeInsets.all(AppDimens.paddingS),
+          decoration: BoxDecoration(
+            color: containerColor.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(AppDimens.radiusS),
+          ),
+          child: Icon(
+            IconData(
+              ContainerIcons.iconCodePoints[container.icon] ?? 0xe24e,
+              fontFamily: 'MaterialIcons',
+            ),
+            color: containerColor,
+          ),
+        ),
+        title: Text(
+          container.name,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        subtitle: Text(
+          container.formatAmount(useMetric),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: containerColor,
+          ),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Quick-add toggle
+            Switch(
+              value: container.isDefault,
+              onChanged: onToggleDefault,
+            ),
+            // Edit button
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: onEdit,
+            ),
+            // Delete button
+            IconButton(
+              icon: Icon(Icons.delete_outline, color: AppColors.error),
+              onPressed: onDelete,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Container editor dialog
+class ContainerEditorDialog extends StatefulWidget {
+  final WaterContainer? container;
+  final Future<void> Function(String name, double amount, String icon, int color) onSave;
+
+  const ContainerEditorDialog({
+    super.key,
+    this.container,
+    required this.onSave,
+  });
+
+  @override
+  State<ContainerEditorDialog> createState() => _ContainerEditorDialogState();
+}
+
+class _ContainerEditorDialogState extends State<ContainerEditorDialog> {
+  late TextEditingController _nameController;
+  late TextEditingController _amountController;
+  late String _selectedIcon;
+  late int _selectedColor;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.container?.name ?? '');
+    _amountController = TextEditingController(
+      text: widget.container?.amountMl.toStringAsFixed(0) ?? '',
+    );
+    _selectedIcon = widget.container?.icon ?? 'local_drink';
+    _selectedColor = widget.container?.colorValue ?? ContainerColors.colors.first;
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isEditing = widget.container != null;
+
+    return AlertDialog(
+      title: Text(isEditing ? 'Edit Container' : 'New Container'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Name field
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'Name',
+                hintText: 'e.g., My Water Bottle',
+              ),
+              textCapitalization: TextCapitalization.words,
+            ),
+            SizedBox(height: AppDimens.paddingL),
+            // Amount field
+            TextField(
+              controller: _amountController,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(
+                labelText: 'Amount (ml)',
+                hintText: 'e.g., 500',
+              ),
+            ),
+            SizedBox(height: AppDimens.paddingXL),
+            // Icon selector
+            Text(
+              'Icon',
+              style: theme.textTheme.labelLarge,
+            ),
+            SizedBox(height: AppDimens.paddingS),
+            Wrap(
+              spacing: AppDimens.paddingS,
+              runSpacing: AppDimens.paddingS,
+              children: ContainerIcons.icons.map((iconName) {
+                final isSelected = iconName == _selectedIcon;
+                final codePoint = ContainerIcons.iconCodePoints[iconName]!;
+                return GestureDetector(
+                  onTap: () => setState(() => _selectedIcon = iconName),
+                  child: Container(
+                    padding: EdgeInsets.all(AppDimens.paddingS),
+                    decoration: BoxDecoration(
+                      color: isSelected 
+                          ? Color(_selectedColor).withOpacity(0.2) 
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(AppDimens.radiusS),
+                      border: Border.all(
+                        color: isSelected 
+                            ? Color(_selectedColor) 
+                            : Colors.grey.shade300,
+                        width: isSelected ? 2 : 1,
+                      ),
+                    ),
+                    child: Icon(
+                      IconData(codePoint, fontFamily: 'MaterialIcons'),
+                      color: isSelected ? Color(_selectedColor) : Colors.grey,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            SizedBox(height: AppDimens.paddingXL),
+            // Color selector
+            Text(
+              'Color',
+              style: theme.textTheme.labelLarge,
+            ),
+            SizedBox(height: AppDimens.paddingS),
+            Wrap(
+              spacing: AppDimens.paddingS,
+              runSpacing: AppDimens.paddingS,
+              children: ContainerColors.colors.map((colorValue) {
+                final isSelected = colorValue == _selectedColor;
+                return GestureDetector(
+                  onTap: () => setState(() => _selectedColor = colorValue),
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: Color(colorValue),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isSelected ? Colors.white : Colors.transparent,
+                        width: 3,
+                      ),
+                      boxShadow: isSelected
+                          ? [
+                              BoxShadow(
+                                color: Color(colorValue).withOpacity(0.5),
+                                blurRadius: 8,
+                                spreadRadius: 2,
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: isSelected
+                        ? const Icon(Icons.check, color: Colors.white, size: 20)
+                        : null,
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _handleSave,
+          child: Text(isEditing ? 'Save' : 'Create'),
+        ),
+      ],
+    );
+  }
+
+  void _handleSave() {
+    final name = _nameController.text.trim();
+    final amount = double.tryParse(_amountController.text) ?? 0;
+
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a name')),
+      );
+      return;
+    }
+
+    if (amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid amount')),
+      );
+      return;
+    }
+
+    widget.onSave(name, amount, _selectedIcon, _selectedColor);
   }
 }
 

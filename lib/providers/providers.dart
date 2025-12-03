@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/water_entry.dart';
+import '../models/container.dart';
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
 
@@ -187,9 +188,84 @@ final motivationalMessageProvider = Provider<String>((ref) {
   }
 });
 
-// ==================== QUICK ADD AMOUNTS ====================
+// ==================== CONTAINER PROVIDERS ====================
+
+/// Provider for all saved containers
+final containersProvider = StateNotifierProvider<ContainersNotifier, List<WaterContainer>>((ref) {
+  final storageService = ref.watch(storageServiceProvider);
+  return ContainersNotifier(storageService);
+});
+
+class ContainersNotifier extends StateNotifier<List<WaterContainer>> {
+  final StorageService _storageService;
+
+  ContainersNotifier(this._storageService) : super([]) {
+    _loadContainers();
+  }
+
+  void _loadContainers() {
+    state = _storageService.getAllContainers();
+  }
+
+  /// Add a new container
+  Future<WaterContainer> addContainer({
+    required String name,
+    required double amountMl,
+    String icon = 'local_drink',
+    int colorValue = 0xFF00B4D8,
+    bool isDefault = true,
+  }) async {
+    final container = await _storageService.addContainer(
+      name: name,
+      amountMl: amountMl,
+      icon: icon,
+      colorValue: colorValue,
+      isDefault: isDefault,
+    );
+    _loadContainers();
+    return container;
+  }
+
+  /// Update an existing container
+  Future<void> updateContainer(WaterContainer container) async {
+    await _storageService.updateContainer(container);
+    _loadContainers();
+  }
+
+  /// Delete a container
+  Future<void> deleteContainer(String id) async {
+    await _storageService.deleteContainer(id);
+    _loadContainers();
+  }
+
+  /// Toggle container as quick-add default
+  Future<void> toggleDefault(String id, bool isDefault) async {
+    await _storageService.toggleContainerDefault(id, isDefault);
+    _loadContainers();
+  }
+
+  /// Reset to default containers
+  Future<void> resetToDefaults() async {
+    await _storageService.resetContainersToDefault();
+    _loadContainers();
+  }
+
+  /// Refresh containers
+  void refresh() {
+    _loadContainers();
+  }
+}
+
+/// Provider for quick-add containers only
+final quickAddContainersProvider = Provider<List<WaterContainer>>((ref) {
+  final containers = ref.watch(containersProvider);
+  return containers.where((c) => c.isDefault).toList();
+});
+
+// ==================== QUICK ADD AMOUNTS (Legacy - keeping for compatibility) ====================
 
 /// Provider for quick-add button amounts based on unit preference
+/// Note: Consider migrating to containersProvider for user-customizable amounts
 final quickAddAmountsProvider = Provider<List<QuickAddAmount>>((ref) {
   final settings = ref.watch(settingsProvider);
   
@@ -217,4 +293,3 @@ class QuickAddAmount {
 
   QuickAddAmount({required this.label, required this.amountMl});
 }
-

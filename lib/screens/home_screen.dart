@@ -13,6 +13,7 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
     final isDark = context.isDarkMode;
 
     return Scaffold(
@@ -63,7 +64,7 @@ class HomeScreen extends ConsumerWidget {
                     SizedBox(height: AppDimens.paddingXXL),
                     
                     // Quick Add Section
-                    _buildQuickAddSection(context),
+                    _buildQuickAddSection(context, theme),
                     SizedBox(height: AppDimens.paddingXL),
                     
                     // Daily Tip
@@ -152,16 +153,14 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildQuickAddSection(BuildContext context) {
-    final theme = Theme.of(context);
-    
+  Widget _buildQuickAddSection(BuildContext context, ThemeData theme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: EdgeInsets.only(left: AppDimens.paddingXS),
           child: Text(
-            'Quick Add',
+            'My Containers',
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.bold,
             ),
