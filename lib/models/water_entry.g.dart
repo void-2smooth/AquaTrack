@@ -61,21 +61,26 @@ class UserSettingsAdapter extends TypeAdapter<UserSettings> {
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
     return UserSettings(
-      dailyGoalMl: fields[0] as double,
-      useMetricUnits: fields[1] as bool,
-      notificationsEnabled: fields[2] as bool,
-      reminderIntervalMinutes: fields[3] as int,
-      isDarkMode: fields[4] as bool,
-      currentStreak: fields[5] as int,
-      longestStreak: fields[6] as int,
+      dailyGoalMl: fields[0] as double? ?? 2000,
+      useMetricUnits: fields[1] as bool? ?? true,
+      notificationsEnabled: fields[2] as bool? ?? false,
+      reminderIntervalMinutes: fields[3] as int? ?? 60,
+      isDarkMode: fields[4] as bool? ?? false,
+      currentStreak: fields[5] as int? ?? 0,
+      longestStreak: fields[6] as int? ?? 0,
       lastActiveDate: fields[7] as DateTime?,
+      userName: fields[8] as String?,
+      weightKg: fields[9] as double?,
+      activityLevel: fields[10] as int?,
+      useCustomGoal: fields[11] as bool? ?? true,
+      calculatedGoalMl: fields[12] as double?,
     );
   }
 
   @override
   void write(BinaryWriter writer, UserSettings obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(13)
       ..writeByte(0)
       ..write(obj.dailyGoalMl)
       ..writeByte(1)
@@ -91,7 +96,17 @@ class UserSettingsAdapter extends TypeAdapter<UserSettings> {
       ..writeByte(6)
       ..write(obj.longestStreak)
       ..writeByte(7)
-      ..write(obj.lastActiveDate);
+      ..write(obj.lastActiveDate)
+      ..writeByte(8)
+      ..write(obj.userName)
+      ..writeByte(9)
+      ..write(obj.weightKg)
+      ..writeByte(10)
+      ..write(obj.activityLevel)
+      ..writeByte(11)
+      ..write(obj.useCustomGoal)
+      ..writeByte(12)
+      ..write(obj.calculatedGoalMl);
   }
 
   @override

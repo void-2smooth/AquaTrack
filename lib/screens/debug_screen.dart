@@ -7,6 +7,7 @@ import '../models/water_entry.dart';
 import '../providers/providers.dart';
 import '../theme/app_theme.dart';
 import '../main.dart' show ProviderLogger;
+import 'splash_screen.dart';
 
 /// Debug/Cheat menu for testing app features
 /// 
@@ -300,6 +301,12 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
           _buildSectionHeader(context, '💾 Data Actions'),
           _buildActionGrid(context, [
             _DebugAction(
+              icon: Icons.restart_alt_rounded,
+              label: 'Restart App',
+              color: Colors.purple,
+              onTap: () => _restartApp(context),
+            ),
+            _DebugAction(
               icon: Icons.delete_forever_rounded,
               label: 'Reset ALL',
               color: Colors.red,
@@ -562,6 +569,15 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
         Navigator.pop(context);
       }
     }
+  }
+
+  void _restartApp(BuildContext context) {
+    HapticFeedback.mediumImpact();
+    // Navigate to splash screen to restart the app flow
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const SplashScreen()),
+      (route) => false, // Remove all previous routes
+    );
   }
 
   void _refreshAllState(WidgetRef ref) {

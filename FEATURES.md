@@ -7,15 +7,15 @@
 ## 🏆 Gamification & Motivation
 
 ### Achievements/Badges System
-- [ ] Unlock badges for milestones
-- [ ] Badge categories: Streaks, Volume, Consistency, Special
-- [ ] Example badges:
-  - 🔥 **Fire Starter** - Complete your first 7-day streak
-  - 💧 **Hydration Hero** - Drink 1L in a single entry
-  - 🏅 **Monthly Master** - Complete 30 days of goal achievement
-  - ⚡ **Early Bird** - Log water before 7am for 5 days
-  - 🌙 **Night Owl** - Meet your goal after 8pm
-  - 💎 **Diamond Streak** - Maintain a 100-day streak
+- [x] Unlock badges for milestones ✅
+- [x] Badge categories: Streaks, Volume, Consistency, Milestones ✅
+- [x] 18 unique achievements implemented ✅
+  - 🔥 **Fire Starter** - Complete your first 7-day streak ✅
+  - 💧 **Hydration Hero** - Complete daily goal for first time ✅
+  - 🏅 **Monthly Master** - Complete 30 days of goal achievement ✅
+  - ⚡ **Early Bird** - Log water before 7am ✅
+  - 🌙 **Night Owl** - Log water after 10pm ✅
+  - 💎 **Century Champion** - Maintain a 100-day streak ✅
 
 ### Weekly Challenges
 - [ ] Rotating weekly challenges
@@ -165,6 +165,29 @@
 
 ---
 
+## 👤 User Experience & Onboarding
+
+### Login & Profile
+- [x] **Name-based login** - Simple, password-free authentication ✅
+- [x] **Personalized greetings** - Time-based greetings with user's name ✅
+- [x] **Profile setup** - Weight and activity level input ✅
+- [x] **Smart goal calculation** - Automatic goal based on profile ✅
+- [x] **Custom goal override** - Option to set manual goal ✅
+- [x] **Splash screen** - Beautiful startup animation with logo ✅
+- [ ] Profile editing - Update weight/activity later
+- [ ] Multiple profiles - Support for family members
+- [ ] Profile pictures - Custom avatars
+
+### Goal Calculation
+- [x] **Weight-based calculation** - 30-35ml per kg base ✅
+- [x] **Activity multipliers** - 1.0x to 1.5x based on activity level ✅
+- [x] **Unit conversion** - Supports kg and lbs ✅
+- [ ] Climate adjustment - Hot weather increases goal
+- [ ] Pregnancy mode - Special calculation for expecting mothers
+- [ ] Medical conditions - Custom multipliers
+
+---
+
 ## 🎨 Personalization
 
 ### Custom Themes
@@ -250,17 +273,20 @@
 
 ## Priority Implementation Order
 
-### Phase 1 - Core Enhancements
+### Phase 0 - Foundation (Completed)
 1. ✅ Modern UI redesign
 2. ✅ Container presets
 3. ✅ Weekly chart visualization
 4. ✅ Undo functionality
+5. ✅ Login & profile system
+6. ✅ Splash screen with logo
+7. ✅ Smart goal calculation
 
-### Phase 2 - Engagement
-5. ⬜ Achievements system
-6. ⬜ Celebration animations
-7. ⬜ Smart notifications
-8. ⬜ Sound effects
+### Phase 1 - Engagement (In Progress)
+1. ✅ Achievements system
+2. ✅ Celebration animations
+3. ⬜ Smart notifications
+4. ⬜ Sound effects
 
 ### Phase 3 - Analytics
 9. ⬜ Statistics dashboard

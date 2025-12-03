@@ -28,17 +28,34 @@
 
 ## ✨ Features
 
+### Core Features
 | Feature | Description |
 |---------|-------------|
-| 🎯 **Custom Goals** | Set daily water intake goals in Liters or Ounces |
-| ⚡ **Quick Add** | One-tap buttons for common amounts (100ml, 250ml, 500ml, 1L) |
+| 👤 **Personalized Experience** | Login with your name for a personalized greeting |
+| 🎯 **Smart Goal Calculation** | Automatic water goal based on weight and activity level |
+| 🎯 **Custom Goals** | Override calculated goals with your own target |
+| ⚡ **Container Presets** | Save and reuse your favorite water containers |
 | 📊 **Visual Progress** | Beautiful circular progress bar with real-time updates |
 | 💬 **Motivational Messages** | Dynamic encouragement based on your progress |
 | 🔥 **Streak Tracking** | Track consecutive days of meeting your hydration goals |
-| 📅 **History View** | Browse past daily records with detailed summaries |
+| 📅 **History View** | Browse past daily records with weekly chart visualization |
 | 🔔 **Smart Reminders** | Optional notifications to keep you hydrated |
 | 🌙 **Dark Mode** | Easy-on-the-eyes dark theme option |
-| 📱 **Cross-Platform** | Works on iOS, Android, and Web |
+
+### Gamification
+| Feature | Description |
+|---------|-------------|
+| 🏆 **Achievements System** | 18 unique achievements across 4 categories |
+| 🎉 **Celebrations** | Confetti animations when goals are reached |
+| 📈 **Weekly Charts** | Beautiful bar charts showing 7-day progress |
+| ⏪ **Undo Functionality** | Quickly undo accidental water entries |
+
+### Developer Features
+| Feature | Description |
+|---------|-------------|
+| 🔧 **Debug Menu** | Comprehensive testing tools and performance stats |
+| ⚡ **Performance Monitoring** | Real-time FPS and build time tracking |
+| 📊 **Provider Analytics** | Track state management performance |
 
 ## 📱 Screenshots
 
@@ -140,28 +157,42 @@ flutter run -d chrome
 
 ```
 lib/
-├── main.dart                      # App entry point & theme config
+├── main.dart                      # App entry point, routing & theme
 │
-├── models/
-│   ├── water_entry.dart           # Data models
-│   └── water_entry.g.dart         # Hive type adapters
+├── models/                        # Data models & Hive adapters
+│   ├── water_entry.dart           # WaterEntry, UserSettings, DailySummary
+│   ├── water_entry.g.dart         # Hive type adapters
+│   ├── container.dart             # WaterContainer model
+│   ├── container.g.dart           # Container adapter
+│   ├── achievement.dart           # Achievement definitions & unlocks
+│   └── achievement.g.dart         # Achievement adapter
 │
-├── providers/
-│   └── providers.dart             # Riverpod state management
+├── providers/                     # State management
+│   └── providers.dart             # All Riverpod providers
 │
-├── screens/
+├── screens/                       # App screens
+│   ├── splash_screen.dart         # App startup with greeting
+│   ├── login_screen.dart          # Name-based login
+│   ├── profile_setup_screen.dart  # Weight, activity, goal setup
 │   ├── home_screen.dart           # Main dashboard
-│   ├── history_screen.dart        # Historical data view
-│   └── settings_screen.dart       # App preferences
+│   ├── history_screen.dart        # Historical data with charts
+│   ├── achievements_screen.dart   # Achievement gallery
+│   ├── settings_screen.dart       # App preferences
+│   └── debug_screen.dart          # Developer tools
 │
-├── services/
-│   ├── storage_service.dart       # Hive operations
+├── services/                      # Business logic
+│   ├── storage_service.dart       # Hive CRUD operations
 │   └── notification_service.dart  # Notification handling
 │
-└── widgets/
-    ├── progress_bar.dart          # Circular progress widget
-    ├── water_add_buttons.dart     # Quick-add buttons
-    └── motivational_message.dart  # Dynamic messages
+├── widgets/                       # Reusable UI components
+│   ├── progress_bar.dart          # Circular progress indicator
+│   ├── water_add_buttons.dart    # Quick-add & container buttons
+│   ├── motivational_message.dart # Dynamic encouragement
+│   ├── weekly_chart.dart         # Chart visualizations
+│   └── celebration.dart          # Achievement & goal celebrations
+│
+└── theme/                         # Theming
+    └── app_theme.dart            # Centralized theme definitions
 ```
 
 ## 🎨 Customization

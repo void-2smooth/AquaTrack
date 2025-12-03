@@ -103,7 +103,7 @@ class WaterEntry extends HiveObject {
 
 ### UserSettings
 
-Stores user preferences and streak data.
+Stores user preferences, profile data, and streak information.
 
 ```dart
 @HiveType(typeId: 1)
@@ -116,6 +116,11 @@ class UserSettings extends HiveObject {
   @HiveField(5) int currentStreak;
   @HiveField(6) int longestStreak;
   @HiveField(7) DateTime? lastActiveDate;
+  @HiveField(8) String? userName;              // User's name for personalization
+  @HiveField(9) double? weightKg;              // Weight in kilograms
+  @HiveField(10) int? activityLevel;           // Activity level (0-4)
+  @HiveField(11) bool useCustomGoal;            // Use custom vs calculated goal
+  @HiveField(12) double? calculatedGoalMl;      // Calculated goal from profile
 }
 ```
 
@@ -129,6 +134,23 @@ class UserSettings extends HiveObject {
 | `currentStreak` | `int` | 0 | Current consecutive days |
 | `longestStreak` | `int` | 0 | Best streak achieved |
 | `lastActiveDate` | `DateTime?` | null | Last goal completion date |
+| `userName` | `String?` | null | User's name for personalization |
+| `weightKg` | `double?` | null | Weight in kilograms for goal calculation |
+| `activityLevel` | `int?` | null | Activity level enum index (0-4) |
+| `useCustomGoal` | `bool` | true | If false, use calculated goal |
+| `calculatedGoalMl` | `double?` | null | Auto-calculated goal from weight/activity |
+
+**Computed Properties:**
+- `effectiveDailyGoalMl` - Returns custom or calculated goal
+- `activityLevelEnum` - Converts int to ActivityLevel enum
+- `hasCompletedProfile` - Checks if user has set name
+
+**Activity Levels:**
+- `sedentary` - Little to no exercise (1.0x multiplier)
+- `light` - Light exercise 1-3 days/week (1.1x)
+- `moderate` - Moderate exercise 3-5 days/week (1.2x)
+- `active` - Hard exercise 6-7 days/week (1.35x)
+- `veryActive` - Very hard exercise, physical job (1.5x)
 
 ---
 
@@ -149,6 +171,75 @@ class DailySummary {
 **Computed Properties:**
 - `completionPercentage` - Progress as decimal (can exceed 1.0)
 - `completionPercentageCapped` - Progress clamped to 0.0-1.0
+
+---
+
+### WaterContainer
+
+Saved container presets for quick water entry.
+
+**Location:** `lib/models/container.dart`
+
+```dart
+@HiveType(typeId: 2)
+class WaterContainer extends HiveObject {
+  @HiveField(0) final String id;
+  @HiveField(1) final String name;
+  @HiveField(2) final double amountMl;
+  @HiveField(3) final bool isDefault;
+  @HiveField(4) final int colorValue;
+  @HiveField(5) final String iconName;
+}
+```
+
+---
+
+### Achievement Models
+
+**Location:** `lib/models/achievement.dart`
+
+#### AchievementDefinition
+
+Static achievement data with rarity, category, and visual properties.
+
+```dart
+class AchievementDefinition {
+  final String id;
+  final String name;
+  final String description;
+  final String icon;
+  final AchievementRarity rarity;
+  final AchievementCategory category;
+  final Color color;
+}
+```
+
+**Rarity Levels:**
+- `common` - Basic achievements (grey)
+- `rare` - Uncommon achievements (blue)
+- `epic` - Special achievements (purple)
+- `legendary` - Ultimate achievements (gold)
+
+**Categories:**
+- `hydration` - Water intake milestones
+- `streak` - Consecutive day achievements
+- `consistency` - Regular habit achievements
+- `milestone` - Total count achievements
+
+#### UnlockedAchievement
+
+Stored achievement unlock record.
+
+```dart
+@HiveType(typeId: 4)
+class UnlockedAchievement extends HiveObject {
+  @HiveField(0) final String achievementId;
+  @HiveField(1) final DateTime unlockedAt;
+  @HiveField(2) final bool seen;
+}
+```
+
+**Total Achievements:** 18 unique achievements across all categories
 
 ---
 
@@ -312,6 +403,67 @@ await notificationService.init(); // Skip on web
 
 ## Screens
 
+### SplashScreen
+
+**Location:** `lib/screens/splash_screen.dart`
+
+App startup screen with personalized greeting and loading animation.
+
+**Features:**
+- Personalized greeting with user's name
+- Time-based greetings (Good Morning/Afternoon/Evening/Night)
+- Animated logo display
+- Status message cycling ("Getting things ready...", etc.)
+- Floating water particle animations
+- 5-second delay before navigation
+- Automatic routing based on user state
+
+**Navigation Flow:**
+- No name → Login screen
+- Name but no weight → Profile setup
+- Complete profile → Home screen
+
+---
+
+### LoginScreen
+
+**Location:** `lib/screens/login_screen.dart`
+
+Simple name-based login (no password required).
+
+**Features:**
+- Name input with validation
+- Beautiful gradient background
+- Animated water drop icon
+- Navigates to profile setup or home after login
+- Name persists in Hive storage
+
+---
+
+### ProfileSetupScreen
+
+**Location:** `lib/screens/profile_setup_screen.dart`
+
+User profile configuration for personalized water goals.
+
+**Features:**
+- Weight input (kg or lbs)
+- Activity level selection (5 levels)
+- Automatic goal calculation based on:
+  - Weight: 30-35ml per kg base
+  - Activity multiplier: 1.0x to 1.5x
+- Toggle between calculated and custom goal
+- Real-time goal preview
+- Saves profile and navigates to home
+
+**Goal Calculation Formula:**
+```
+Base = Weight (kg) × 32.5ml
+Goal = Base × Activity Multiplier
+```
+
+---
+
 ### HomeScreen
 
 **Location:** `lib/screens/home_screen.dart`
@@ -319,11 +471,11 @@ await notificationService.init(); // Skip on web
 Main dashboard showing today's progress.
 
 **Components:**
-- Header with date
+- Personalized header with greeting and user's name
 - `WaterProgressBar` - Circular progress indicator
 - `MotivationalMessage` - Dynamic encouragement
 - `StreakDisplay` - Current and best streaks
-- `WaterAddButtons` - Quick-add options
+- `WaterAddButtons` - Container presets and quick-add
 - `MotivationalTip` - Daily hydration tips
 - `LargeAddButton` - FAB for default amount
 
@@ -333,13 +485,31 @@ Main dashboard showing today's progress.
 
 **Location:** `lib/screens/history_screen.dart`
 
-Historical view of water intake.
+Historical view of water intake with visualizations.
 
 **Features:**
+- Weekly bar chart visualization (7 days)
 - 30-day statistics header (goals met, success rate, daily average)
 - List of daily summaries
 - Visual indicators for goal completion
 - Tap to view day details
+- Goal line indicator on chart
+
+---
+
+### AchievementsScreen
+
+**Location:** `lib/screens/achievements_screen.dart`
+
+Achievement gallery showing all available and unlocked achievements.
+
+**Features:**
+- Progress header with unlock count
+- Category organization (Hydration, Streaks, Consistency, Milestones)
+- Rarity badges (Common, Rare, Epic, Legendary)
+- Locked/unlocked visual states
+- Achievement details and descriptions
+- Auto-marks achievements as seen when viewed
 
 ---
 
@@ -355,7 +525,38 @@ App configuration and preferences.
 3. **Appearance** - Dark mode toggle
 4. **Notifications** - Enable/disable, interval selection, test button
 5. **Data** - Export (coming soon), clear all data
-6. **About** - App version and credits
+6. **About** - App version with debug menu unlock (tap 7 times)
+
+**Debug Menu Access:**
+- Tap version text 7 times quickly
+- Shows progress ("X more taps to unlock")
+- Unlocks debug menu in About section
+
+---
+
+### DebugScreen
+
+**Location:** `lib/screens/debug_screen.dart`
+
+Comprehensive developer tools and testing utilities.
+
+**Sections:**
+1. **⚡ Performance** - FPS, build count, build time
+2. **🔄 Provider Stats** - State update tracking
+3. **💾 Storage Stats** - Data statistics
+4. **📊 App State** - Current app state values
+5. **💧 Water Actions** - Add water, complete goals
+6. **🔥 Streak Actions** - Set streak values
+7. **🎉 Celebrations** - Trigger animations
+8. **🏆 Achievements** - Unlock/lock achievements
+9. **💾 Data Actions** - Restart app, reset data
+
+**Features:**
+- Real-time performance monitoring
+- Provider update analytics
+- Quick testing actions
+- Restart app functionality
+- Reset all data option
 
 ---
 
@@ -440,6 +641,51 @@ Dynamic message card based on progress.
 ### StreakDisplay
 
 Shows current and longest streak.
+
+---
+
+### WeeklyChart
+
+**Location:** `lib/widgets/weekly_chart.dart`
+
+Beautiful animated bar chart showing 7-day water intake.
+
+**Features:**
+- Interactive bar chart with touch tooltips
+- Goal line indicator (dashed)
+- Color-coded bars (green for goal met)
+- Day labels (M, T, W, T, F, S, S)
+- Weekly statistics summary
+- Animated transitions
+
+**Usage:**
+```dart
+const WeeklyChart()
+```
+
+**Components:**
+- `WeeklyChart` - Full chart with stats
+- `WeeklyMiniChart` - Compact version for home screen
+
+---
+
+### Celebration Widgets
+
+**Location:** `lib/widgets/celebration.dart`
+
+Celebration animations and popups for achievements and milestones.
+
+**Widgets:**
+- `AchievementUnlockPopup` - Full-screen achievement unlock animation
+- `GoalReachedBanner` - Slide-down banner for goal completion
+- `StreakMilestoneBanner` - Special streak celebration
+- `CelebrationOverlay` - Confetti animation wrapper
+
+**Features:**
+- Confetti animations
+- Glow effects
+- Auto-dismiss timers
+- Smooth animations
 
 ```dart
 const StreakDisplay();

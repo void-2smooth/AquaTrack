@@ -11,6 +11,9 @@ import 'screens/home_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/achievements_screen.dart';
+import 'screens/login_screen.dart';
+import 'screens/profile_setup_screen.dart';
+import 'screens/splash_screen.dart';
 import 'widgets/celebration.dart';
 import 'theme/app_theme.dart';
 
@@ -120,7 +123,14 @@ class AquaTrackApp extends ConsumerWidget {
       darkTheme: AppTheme.dark,
       themeMode: themeMode,
       
-      home: const MainNavigationScreen(),
+      // Always start with splash screen
+      home: const SplashScreen(),
+      routes: {
+        '/splash': (context) => const SplashScreen(),
+        '/login': (context) => const LoginScreen(),
+        '/profile-setup': (context) => const ProfileSetupScreen(),
+        '/home': (context) => const MainNavigationScreen(),
+      },
     );
   }
 }

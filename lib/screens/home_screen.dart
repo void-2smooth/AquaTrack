@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/app_theme.dart';
+import '../providers/providers.dart';
 import '../widgets/progress_bar.dart';
 import '../widgets/water_add_buttons.dart';
 import '../widgets/motivational_message.dart';
@@ -40,7 +41,7 @@ class HomeScreen extends ConsumerWidget {
                     AppDimens.paddingXXL,
                     AppDimens.paddingS,
                   ),
-                  child: _buildHeader(context),
+                  child: _buildHeader(context, ref),
                 ),
               ),
               
@@ -82,8 +83,10 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final settings = ref.watch(settingsProvider);
+    final userName = settings.userName;
     
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -92,14 +95,14 @@ class HomeScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              _getGreeting(),
+              _getGreeting(userName),
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurface.withOpacity(0.6),
               ),
             ),
             SizedBox(height: AppDimens.paddingXS),
             Text(
-              'Stay Hydrated 💧',
+              userName != null ? 'Stay Hydrated, ${userName.split(' ').first}! 💧' : 'Stay Hydrated 💧',
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
@@ -175,11 +178,21 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  String _getGreeting() {
+  String _getGreeting(String? userName) {
     final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good Morning';
-    if (hour < 17) return 'Good Afternoon';
-    return 'Good Evening';
+    String greeting;
+    if (hour < 12) {
+      greeting = 'Good Morning';
+    } else if (hour < 17) {
+      greeting = 'Good Afternoon';
+    } else {
+      greeting = 'Good Evening';
+    }
+    
+    if (userName != null && userName.isNotEmpty) {
+      return '$greeting, ${userName.split(' ').first}';
+    }
+    return greeting;
   }
 
   String _getFormattedDate() {

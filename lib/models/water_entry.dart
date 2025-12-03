@@ -52,6 +52,15 @@ class WaterEntry extends HiveObject {
   String toString() => 'WaterEntry(id: $id, amountMl: $amountMl, timestamp: $timestamp)';
 }
 
+/// Activity level for water goal calculation
+enum ActivityLevel {
+  sedentary,    // Little to no exercise
+  light,        // Light exercise 1-3 days/week
+  moderate,     // Moderate exercise 3-5 days/week
+  active,       // Hard exercise 6-7 days/week
+  veryActive,   // Very hard exercise, physical job
+}
+
 /// User settings model for storing preferences
 @HiveType(typeId: 1)
 class UserSettings extends HiveObject {
@@ -79,6 +88,21 @@ class UserSettings extends HiveObject {
   @HiveField(7)
   DateTime? lastActiveDate; // Last date user added water
 
+  @HiveField(8)
+  String? userName; // User's name for personalization
+
+  @HiveField(9)
+  double? weightKg; // User's weight in kilograms
+
+  @HiveField(10)
+  int? activityLevel; // Activity level (0-4, maps to ActivityLevel enum)
+
+  @HiveField(11)
+  bool useCustomGoal; // If true, use dailyGoalMl; if false, calculate from profile
+
+  @HiveField(12)
+  double? calculatedGoalMl; // Calculated goal based on weight/activity
+
   UserSettings({
     this.dailyGoalMl = 2000, // Default 2L
     this.useMetricUnits = true,
@@ -88,13 +112,40 @@ class UserSettings extends HiveObject {
     this.currentStreak = 0,
     this.longestStreak = 0,
     this.lastActiveDate,
+    this.userName,
+    this.weightKg,
+    this.activityLevel,
+    this.useCustomGoal = true, // Default to custom until profile is set
+    this.calculatedGoalMl,
   });
 
+  /// Get activity level enum
+  ActivityLevel? get activityLevelEnum {
+    if (activityLevel == null) return null;
+    return ActivityLevel.values[activityLevel!.clamp(0, ActivityLevel.values.length - 1)];
+  }
+
+  /// Set activity level from enum
+  void setActivityLevel(ActivityLevel level) {
+    activityLevel = level.index;
+  }
+
+  /// Get effective daily goal (custom or calculated)
+  double get effectiveDailyGoalMl {
+    if (useCustomGoal || calculatedGoalMl == null) {
+      return dailyGoalMl;
+    }
+    return calculatedGoalMl!;
+  }
+
   /// Get daily goal in liters
-  double get dailyGoalLiters => dailyGoalMl / 1000;
+  double get dailyGoalLiters => effectiveDailyGoalMl / 1000;
 
   /// Get daily goal in fluid ounces
-  double get dailyGoalOz => dailyGoalMl * 0.033814;
+  double get dailyGoalOz => effectiveDailyGoalMl * 0.033814;
+
+  /// Check if user has completed profile setup
+  bool get hasCompletedProfile => userName != null && userName!.isNotEmpty;
 
   /// Create a copy with updated fields
   UserSettings copyWith({
@@ -106,6 +157,12 @@ class UserSettings extends HiveObject {
     int? currentStreak,
     int? longestStreak,
     DateTime? lastActiveDate,
+    String? userName,
+    double? weightKg,
+    int? activityLevel,
+    ActivityLevel? activityLevelEnum,
+    bool? useCustomGoal,
+    double? calculatedGoalMl,
   }) {
     return UserSettings(
       dailyGoalMl: dailyGoalMl ?? this.dailyGoalMl,
@@ -116,6 +173,11 @@ class UserSettings extends HiveObject {
       currentStreak: currentStreak ?? this.currentStreak,
       longestStreak: longestStreak ?? this.longestStreak,
       lastActiveDate: lastActiveDate ?? this.lastActiveDate,
+      userName: userName ?? this.userName,
+      weightKg: weightKg ?? this.weightKg,
+      activityLevel: activityLevelEnum != null ? activityLevelEnum.index : (activityLevel ?? this.activityLevel),
+      useCustomGoal: useCustomGoal ?? this.useCustomGoal,
+      calculatedGoalMl: calculatedGoalMl ?? this.calculatedGoalMl,
     );
   }
 }

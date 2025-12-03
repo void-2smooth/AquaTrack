@@ -120,7 +120,7 @@ class WaterEntriesNotifier extends StateNotifier<List<WaterEntry>> {
     // Get current total before adding (from state directly, not provider to avoid circular dep)
     final previousTotal = state.fold(0.0, (sum, e) => sum + e.amountMl);
     final settings = _ref.read(settingsProvider);
-    final goal = settings.dailyGoalMl;
+    final goal = settings.effectiveDailyGoalMl;
     final wasGoalReached = previousTotal >= goal;
     
     final entry = await _storageService.addWaterEntry(amountMl, note: note);
@@ -278,16 +278,18 @@ final todayTotalProvider = Provider<double>((ref) {
 final todayProgressProvider = Provider<double>((ref) {
   final total = ref.watch(todayTotalProvider);
   final settings = ref.watch(settingsProvider);
-  if (settings.dailyGoalMl <= 0) return 0.0;
-  return (total / settings.dailyGoalMl).clamp(0.0, 1.0);
+  final goal = settings.effectiveDailyGoalMl;
+  if (goal <= 0) return 0.0;
+  return (total / goal).clamp(0.0, 1.0);
 });
 
 /// Provider for today's progress percentage uncapped (can exceed 1.0)
 final todayProgressUncappedProvider = Provider<double>((ref) {
   final total = ref.watch(todayTotalProvider);
   final settings = ref.watch(settingsProvider);
-  if (settings.dailyGoalMl <= 0) return 0.0;
-  return total / settings.dailyGoalMl;
+  final goal = settings.effectiveDailyGoalMl;
+  if (goal <= 0) return 0.0;
+  return total / goal;
 });
 
 // ==================== HISTORY PROVIDERS ====================
@@ -308,7 +310,7 @@ final weeklyChartDataProvider = Provider<WeeklyChartData>((ref) {
   ref.watch(todayEntriesProvider);
   
   final summaries = storageService.getDailySummaries(days: 7);
-  final goal = settings.dailyGoalMl;
+  final goal = settings.effectiveDailyGoalMl;
   
   // Calculate statistics
   final totalMl = summaries.fold(0.0, (sum, s) => sum + s.totalAmountMl);
@@ -563,7 +565,7 @@ class AchievementsNotifier extends StateNotifier<AchievementsState> {
     final totalLogged = _storageService.getTotalWaterLogged();
     final entryCount = _storageService.getTotalEntryCount();
     final streak = settings.currentStreak;
-    final goalMl = settings.dailyGoalMl;
+    final goalMl = settings.effectiveDailyGoalMl;
 
     // Check first drop
     if (entryCount >= 1) {

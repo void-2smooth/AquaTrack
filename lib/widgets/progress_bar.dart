@@ -29,16 +29,18 @@ class WaterProgressBar extends ConsumerWidget {
     final String currentAmount;
     final String goalAmount;
     
+    final effectiveGoal = settings.effectiveDailyGoalMl;
+    
     if (settings.useMetricUnits) {
       currentAmount = totalMl >= 1000 
           ? '${(totalMl / 1000).toStringAsFixed(1)}' 
           : '${totalMl.toStringAsFixed(0)}';
-      goalAmount = settings.dailyGoalMl >= 1000 
-          ? '${(settings.dailyGoalMl / 1000).toStringAsFixed(1)}L' 
-          : '${settings.dailyGoalMl.toStringAsFixed(0)}ml';
+      goalAmount = effectiveGoal >= 1000 
+          ? '${(effectiveGoal / 1000).toStringAsFixed(1)}L' 
+          : '${effectiveGoal.toStringAsFixed(0)}ml';
     } else {
       currentAmount = (totalMl * 0.033814).toStringAsFixed(1);
-      goalAmount = '${(settings.dailyGoalMl * 0.033814).toStringAsFixed(0)}oz';
+      goalAmount = '${(effectiveGoal * 0.033814).toStringAsFixed(0)}oz';
     }
 
     final progressColor = AppColors.getProgressColor(progress);
