@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:confetti/confetti.dart';
 import '../models/achievement.dart';
+import '../models/challenge.dart';
 import '../theme/app_theme.dart';
 
 /// Celebration types
@@ -520,6 +521,209 @@ class _StreakMilestoneBannerState extends State<StreakMilestoneBanner>
                 'You\'re on fire! Keep it up!',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: Colors.white.withOpacity(0.9),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Challenge completion popup
+class ChallengeCompletionPopup extends StatefulWidget {
+  final ChallengeDefinition definition;
+  final ActiveChallenge challenge;
+  final VoidCallback onDismiss;
+
+  const ChallengeCompletionPopup({
+    super.key,
+    required this.definition,
+    required this.challenge,
+    required this.onDismiss,
+  });
+
+  @override
+  State<ChallengeCompletionPopup> createState() => _ChallengeCompletionPopupState();
+}
+
+class _ChallengeCompletionPopupState extends State<ChallengeCompletionPopup>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _fadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+
+    _scaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.elasticOut),
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
+    );
+
+    _controller.forward();
+
+    // Auto-dismiss after 5 seconds
+    Future.delayed(const Duration(seconds: 5), () {
+      if (mounted) {
+        _dismiss();
+      }
+    });
+  }
+
+  void _dismiss() async {
+    await _controller.reverse();
+    widget.onDismiss();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Color _getDifficultyColor() {
+    switch (widget.definition.difficulty) {
+      case ChallengeDifficulty.easy:
+        return AppColors.success;
+      case ChallengeDifficulty.medium:
+        return AppColors.warning;
+      case ChallengeDifficulty.hard:
+        return Colors.red;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final difficultyColor = _getDifficultyColor();
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Opacity(
+          opacity: _fadeAnimation.value,
+          child: Transform.scale(
+            scale: _scaleAnimation.value,
+            child: child,
+          ),
+        );
+      },
+      child: GestureDetector(
+        onTap: _dismiss,
+        child: Container(
+          margin: EdgeInsets.all(AppDimens.paddingXL),
+          padding: EdgeInsets.all(AppDimens.paddingXL),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                difficultyColor.withOpacity(0.9),
+                difficultyColor.withOpacity(0.7),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(AppDimens.radiusXL),
+            boxShadow: [
+              BoxShadow(
+                color: difficultyColor.withOpacity(0.4),
+                blurRadius: 20,
+                spreadRadius: 5,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Text(
+                '🏆 Challenge Complete!',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: AppDimens.paddingL),
+              
+              // Trophy icon
+              Container(
+                padding: EdgeInsets.all(AppDimens.paddingL),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.white.withOpacity(0.3),
+                      blurRadius: 15,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.emoji_events_rounded,
+                  size: 48,
+                  color: Colors.white,
+                ),
+              ),
+              SizedBox(height: AppDimens.paddingL),
+              
+              // Challenge name
+              Text(
+                widget.definition.title,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: AppDimens.paddingS),
+              
+              // Description
+              Text(
+                widget.definition.description,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: Colors.white.withOpacity(0.9),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: AppDimens.paddingL),
+              
+              // Reward
+              Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: AppDimens.paddingL,
+                  vertical: AppDimens.paddingM,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(AppDimens.radiusM),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.stars_rounded,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                    SizedBox(width: AppDimens.paddingS),
+                    Text(
+                      '${widget.definition.rewardPoints} Points Earned!',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

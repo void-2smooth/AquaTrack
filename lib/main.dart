@@ -9,8 +9,10 @@ import 'services/notification_service.dart';
 import 'providers/providers.dart';
 import 'screens/home_screen.dart';
 import 'screens/history_screen.dart';
-import 'screens/settings_screen.dart';
 import 'screens/achievements_screen.dart';
+import 'screens/challenges_screen.dart';
+import 'screens/shop_screen.dart';
+import 'screens/settings_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/profile_setup_screen.dart';
 import 'screens/splash_screen.dart';
@@ -151,6 +153,8 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
   final List<Widget> _screens = const [
     HomeScreen(),
     HistoryScreen(),
+    ChallengesScreen(),
+    ShopScreen(),
     AchievementsScreen(),
     SettingsScreen(),
   ];
@@ -237,6 +241,20 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
                 },
               ),
             ),
+          
+          // Challenge completion popup
+          if (celebrationState.showChallengeCelebration && 
+              celebrationState.challengeDefinition != null &&
+              celebrationState.challengeCompleted != null)
+            Center(
+              child: ChallengeCompletionPopup(
+                definition: celebrationState.challengeDefinition!,
+                challenge: celebrationState.challengeCompleted!,
+                onDismiss: () {
+                  ref.read(celebrationProvider.notifier).dismissChallengeCelebration();
+                },
+              ),
+            ),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -257,16 +275,26 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
             selectedIcon: Icon(Icons.history),
             label: 'History',
           ),
+          const NavigationDestination(
+            icon: Icon(Icons.emoji_events_outlined),
+            selectedIcon: Icon(Icons.emoji_events),
+            label: 'Challenges',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.shopping_bag_outlined),
+            selectedIcon: Icon(Icons.shopping_bag),
+            label: 'Shop',
+          ),
           NavigationDestination(
             icon: Badge(
               isLabelVisible: unseenCount > 0,
               label: Text('$unseenCount'),
-              child: const Icon(Icons.emoji_events_outlined),
+              child: const Icon(Icons.workspace_premium_outlined),
             ),
             selectedIcon: Badge(
               isLabelVisible: unseenCount > 0,
               label: Text('$unseenCount'),
-              child: const Icon(Icons.emoji_events),
+              child: const Icon(Icons.workspace_premium),
             ),
             label: 'Trophies',
           ),

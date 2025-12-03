@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/water_entry.dart';
 import '../models/container.dart';
 import '../models/achievement.dart';
+import '../models/challenge.dart';
+import '../models/shop_item.dart';
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
 
@@ -142,6 +144,9 @@ class WaterEntriesNotifier extends StateNotifier<List<WaterEntry>> {
     
     // Check and unlock achievements (defer to avoid blocking)
     _checkAchievementsAsync();
+    
+    // Check challenge progress
+    _ref.read(activeChallengeProvider.notifier).checkProgress();
     
     return entry;
   }
@@ -711,28 +716,41 @@ class AchievementsNotifier extends StateNotifier<AchievementsState> {
 class CelebrationState {
   final bool showGoalCelebration;
   final bool showAchievementCelebration;
+  final bool showChallengeCelebration;
   final AchievementDefinition? achievement;
+  final ChallengeDefinition? challengeDefinition;
+  final ActiveChallenge? challengeCompleted;
   final int? streakMilestone;
 
   const CelebrationState({
     this.showGoalCelebration = false,
     this.showAchievementCelebration = false,
+    this.showChallengeCelebration = false,
     this.achievement,
+    this.challengeDefinition,
+    this.challengeCompleted,
     this.streakMilestone,
   });
 
   CelebrationState copyWith({
     bool? showGoalCelebration,
     bool? showAchievementCelebration,
+    bool? showChallengeCelebration,
     AchievementDefinition? achievement,
+    ChallengeDefinition? challengeDefinition,
+    ActiveChallenge? challengeCompleted,
     int? streakMilestone,
     bool clearAchievement = false,
+    bool clearChallenge = false,
     bool clearStreak = false,
   }) {
     return CelebrationState(
       showGoalCelebration: showGoalCelebration ?? this.showGoalCelebration,
       showAchievementCelebration: showAchievementCelebration ?? this.showAchievementCelebration,
+      showChallengeCelebration: showChallengeCelebration ?? this.showChallengeCelebration,
       achievement: clearAchievement ? null : (achievement ?? this.achievement),
+      challengeDefinition: clearChallenge ? null : (challengeDefinition ?? this.challengeDefinition),
+      challengeCompleted: clearChallenge ? null : (challengeCompleted ?? this.challengeCompleted),
       streakMilestone: clearStreak ? null : (streakMilestone ?? this.streakMilestone),
     );
   }
@@ -785,8 +803,332 @@ class CelebrationNotifier extends StateNotifier<CelebrationState> {
     state = state.copyWith(clearStreak: true);
   }
 
+  /// Trigger challenge completion celebration
+  void triggerChallengeCelebration(
+    ChallengeDefinition definition,
+    ActiveChallenge challenge,
+  ) {
+    state = state.copyWith(
+      showChallengeCelebration: true,
+      challengeDefinition: definition,
+      challengeCompleted: challenge,
+    );
+  }
+
+  /// Dismiss challenge celebration
+  void dismissChallengeCelebration() {
+    state = state.copyWith(
+      showChallengeCelebration: false,
+      clearChallenge: true,
+    );
+  }
+
   /// Reset daily flags (call at midnight or app start)
   void resetDaily() {
     _hasShownGoalCelebrationToday = false;
+  }
+}
+
+// ==================== CHALLENGES PROVIDERS ====================
+
+/// Provider for active challenge
+final activeChallengeProvider = StateNotifierProvider<ChallengeNotifier, ActiveChallenge?>((ref) {
+  final storageService = ref.watch(storageServiceProvider);
+  return ChallengeNotifier(storageService, ref);
+});
+
+/// Challenge state
+class ChallengeState {
+  final ActiveChallenge? activeChallenge;
+  final ChallengeDefinition? definition;
+  final bool isChecking;
+
+  const ChallengeState({
+    this.activeChallenge,
+    this.definition,
+    this.isChecking = false,
+  });
+
+  ChallengeState copyWith({
+    ActiveChallenge? activeChallenge,
+    ChallengeDefinition? definition,
+    bool? isChecking,
+    bool clearChallenge = false,
+  }) {
+    return ChallengeState(
+      activeChallenge: clearChallenge ? null : (activeChallenge ?? this.activeChallenge),
+      definition: definition ?? this.definition,
+      isChecking: isChecking ?? this.isChecking,
+    );
+  }
+
+  bool get hasActiveChallenge => activeChallenge != null;
+  double get progress => activeChallenge?.completionPercentage ?? 0.0;
+  int get daysRemaining => activeChallenge?.daysRemaining ?? 0;
+  int get daysCompleted => activeChallenge?.daysCompleted ?? 0;
+}
+
+class ChallengeNotifier extends StateNotifier<ActiveChallenge?> {
+  final StorageService _storageService;
+  final Ref _ref;
+
+  ChallengeNotifier(this._storageService, this._ref) : super(null) {
+    _loadActiveChallenge();
+    _checkAndAutoStart();
+  }
+
+  void _loadActiveChallenge() {
+    state = _storageService.getActiveChallenge();
+  }
+
+  /// Check if we need to auto-start a new weekly challenge
+  Future<void> _checkAndAutoStart() async {
+    final active = _storageService.getActiveChallenge();
+    
+    // If no active challenge, start a random one
+    if (active == null) {
+      await startRandomChallenge();
+    } else {
+      // Check if challenge expired
+      if (DateTime.now().isAfter(active.endDate)) {
+        // Mark as expired and start new one
+        await _storageService.updateChallenge(active.copyWith(
+          status: ChallengeStatus.expired,
+        ));
+        await startRandomChallenge();
+      }
+    }
+  }
+
+  /// Start a new challenge
+  Future<ActiveChallenge?> startChallenge(String challengeId) async {
+    try {
+      final challenge = await _storageService.startChallenge(challengeId);
+      state = challenge;
+      return challenge;
+    } catch (e) {
+      debugPrint('Error starting challenge: $e');
+      return null;
+    }
+  }
+
+  /// Start a random weekly challenge
+  Future<ActiveChallenge?> startRandomChallenge() async {
+    final challenge = Challenges.getRandomChallenge();
+    return await startChallenge(challenge.id);
+  }
+
+  /// Check and update challenge progress
+  Future<void> checkProgress() async {
+    if (state == null) return;
+
+    final challenge = state!;
+    final definition = Challenges.getById(challenge.challengeId);
+    if (definition == null) return;
+
+    final today = DateTime.now();
+    final todayKey = '${today.year}-${today.month}-${today.day}';
+
+    // Skip if already checked today
+    if (challenge.progress[todayKey] == true) return;
+
+    bool dayCompleted = false;
+
+    switch (definition.type) {
+      case ChallengeType.earlyMorning:
+        dayCompleted = _checkEarlyMorning(definition);
+        break;
+      case ChallengeType.multipleLogs:
+        dayCompleted = _checkMultipleLogs(definition);
+        break;
+      case ChallengeType.exceedGoal:
+        dayCompleted = _checkExceedGoal(definition);
+        break;
+      case ChallengeType.perfectDays:
+        dayCompleted = _checkPerfectDays(definition);
+        break;
+      case ChallengeType.totalVolume:
+        // Total volume challenges are checked at end of period
+        // Check if we're at the end date
+        if (DateTime.now().isAfter(challenge.endDate.subtract(const Duration(hours: 1)))) {
+          dayCompleted = _checkTotalVolume(definition, challenge);
+        }
+        break;
+      case ChallengeType.consistency:
+        dayCompleted = _checkConsistency(definition);
+        break;
+    }
+
+    if (dayCompleted) {
+      final updatedProgress = Map<String, dynamic>.from(challenge.progress);
+      updatedProgress[todayKey] = true;
+
+      final updated = challenge.copyWith(progress: updatedProgress);
+      await _storageService.updateChallenge(updated);
+      state = updated;
+
+      // Check if challenge is complete
+      if (updated.daysCompleted >= definition.targetDays) {
+        await _completeChallenge(updated);
+      }
+    }
+  }
+
+  bool _checkEarlyMorning(ChallengeDefinition definition) {
+    final entries = _storageService.getTodayEntries();
+    final beforeHour = definition.parameters['beforeHour'] as int;
+    final amountMl = definition.parameters['amountMl'] as int;
+
+    final earlyEntries = entries.where((e) => e.timestamp.hour < beforeHour).toList();
+    final totalEarly = earlyEntries.fold(0.0, (sum, e) => sum + e.amountMl);
+
+    return totalEarly >= amountMl;
+  }
+
+  bool _checkMultipleLogs(ChallengeDefinition definition) {
+    final entries = _storageService.getTodayEntries();
+    final minLogs = definition.parameters['minLogsPerDay'] as int;
+    return entries.length >= minLogs;
+  }
+
+  bool _checkExceedGoal(ChallengeDefinition definition) {
+    final settings = _ref.read(settingsProvider);
+    final todayTotal = _ref.read(todayTotalProvider);
+    final goal = settings.effectiveDailyGoalMl;
+    final excessPercent = definition.parameters['excessPercent'] as int;
+
+    final target = goal * (1 + excessPercent / 100);
+    return todayTotal >= target;
+  }
+
+  bool _checkPerfectDays(ChallengeDefinition definition) {
+    final settings = _ref.read(settingsProvider);
+    final todayTotal = _ref.read(todayTotalProvider);
+    final goal = settings.effectiveDailyGoalMl;
+    return todayTotal >= goal;
+  }
+
+  bool _checkTotalVolume(ChallengeDefinition definition, ActiveChallenge challenge) {
+    // Check total volume for the challenge period
+    final totalLiters = definition.parameters['totalLiters'] as int;
+    final targetMl = totalLiters * 1000;
+    
+    // Get all entries from challenge start date to end date
+    final allEntries = _storageService.getAllEntries();
+    final weekEntries = allEntries.where((e) => 
+      e.timestamp.isAfter(challenge.startDate.subtract(const Duration(days: 1))) &&
+      e.timestamp.isBefore(challenge.endDate.add(const Duration(days: 1)))
+    ).toList();
+    
+    final totalMl = weekEntries.fold(0.0, (sum, e) => sum + e.amountMl);
+    
+    // Mark as complete if target reached
+    return totalMl >= targetMl;
+  }
+
+  bool _checkConsistency(ChallengeDefinition definition) {
+    final entries = _storageService.getTodayEntries();
+    final startHour = definition.parameters['startHour'] as int;
+    final endHour = definition.parameters['endHour'] as int;
+    
+    // Check if there's at least one entry in the time window
+    return entries.any((e) => 
+      e.timestamp.hour >= startHour && e.timestamp.hour < endHour
+    );
+  }
+
+  Future<void> _completeChallenge(ActiveChallenge challenge) async {
+    final definition = Challenges.getById(challenge.challengeId);
+    if (definition == null) return;
+
+    await _storageService.completeChallenge(challenge.challengeId);
+    state = challenge.copyWith(
+      completed: true,
+      completedAt: DateTime.now(),
+      status: ChallengeStatus.completed,
+    );
+
+    // Award points
+    await _storageService.addPoints(definition.rewardPoints);
+    _ref.read(settingsProvider.notifier).refresh();
+
+    // Trigger challenge completion celebration
+    _ref.read(celebrationProvider.notifier).triggerChallengeCelebration(
+      definition,
+      challenge,
+    );
+  }
+
+  /// Refresh challenge state
+  void refresh() {
+    _loadActiveChallenge();
+  }
+
+  /// Award points for challenge completion
+  Future<void> awardPoints(int points) async {
+    await _storageService.addPoints(points);
+    _ref.read(settingsProvider.notifier).refresh();
+  }
+}
+
+// ==================== SHOP PROVIDERS ====================
+
+/// Provider for shop items
+final shopItemsProvider = Provider<List<ShopItem>>((ref) {
+  return ShopCatalog.all;
+});
+
+/// Provider for purchased items
+final purchasedItemsProvider = StateNotifierProvider<PurchasedItemsNotifier, List<PurchasedItem>>((ref) {
+  final storageService = ref.watch(storageServiceProvider);
+  return PurchasedItemsNotifier(storageService);
+});
+
+class PurchasedItemsNotifier extends StateNotifier<List<PurchasedItem>> {
+  final StorageService _storageService;
+
+  PurchasedItemsNotifier(this._storageService) : super([]) {
+    _loadPurchasedItems();
+  }
+
+  void _loadPurchasedItems() {
+    state = _storageService.getPurchasedItems();
+  }
+
+  Future<bool> purchaseItem(String itemId) async {
+    final item = ShopCatalog.getById(itemId);
+    if (item == null) return false;
+
+    final settings = _storageService.getSettings();
+    if (settings.points < item.price) return false;
+
+    final success = await _storageService.spendPoints(item.price);
+    if (!success) return false;
+
+    await _storageService.purchaseItem(itemId);
+    _loadPurchasedItems();
+    return true;
+  }
+
+  Future<void> equipItem(String itemId) async {
+    await _storageService.equipItem(itemId);
+    _loadPurchasedItems();
+  }
+
+  bool isPurchased(String itemId) {
+    return _storageService.isItemPurchased(itemId);
+  }
+
+  bool isEquipped(String itemId) {
+    try {
+      final purchased = state.firstWhere((p) => p.itemId == itemId);
+      return purchased.isEquipped;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void refresh() {
+    _loadPurchasedItems();
   }
 }

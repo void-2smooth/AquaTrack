@@ -74,13 +74,14 @@ class UserSettingsAdapter extends TypeAdapter<UserSettings> {
       activityLevel: fields[10] as int?,
       useCustomGoal: fields[11] as bool? ?? true,
       calculatedGoalMl: fields[12] as double?,
+      points: fields[13] as int? ?? 0,
     );
   }
 
   @override
   void write(BinaryWriter writer, UserSettings obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(14)
       ..writeByte(0)
       ..write(obj.dailyGoalMl)
       ..writeByte(1)
@@ -106,7 +107,9 @@ class UserSettingsAdapter extends TypeAdapter<UserSettings> {
       ..writeByte(11)
       ..write(obj.useCustomGoal)
       ..writeByte(12)
-      ..write(obj.calculatedGoalMl);
+      ..write(obj.calculatedGoalMl)
+      ..writeByte(13)
+      ..write(obj.points);
   }
 
   @override

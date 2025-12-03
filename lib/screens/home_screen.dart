@@ -5,6 +5,7 @@ import '../providers/providers.dart';
 import '../widgets/progress_bar.dart';
 import '../widgets/water_add_buttons.dart';
 import '../widgets/motivational_message.dart';
+import '../widgets/challenge_card.dart';
 
 /// Home screen - Main screen showing today's progress
 /// 
@@ -55,6 +56,9 @@ class HomeScreen extends ConsumerWidget {
                     // Progress Card with gradient background
                     _buildProgressCard(context, isDark),
                     SizedBox(height: AppDimens.paddingXXL),
+                    
+                    // Active Challenge
+                    const ChallengeCard(),
                     
                     // Motivational Message
                     const MotivationalMessage(),

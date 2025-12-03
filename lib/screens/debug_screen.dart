@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/achievement.dart';
 import '../models/water_entry.dart';
 import '../providers/providers.dart';
+import '../models/challenge.dart';
 import '../theme/app_theme.dart';
 import '../main.dart' show ProviderLogger;
 import 'splash_screen.dart';
@@ -297,6 +298,36 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
           ]),
           SizedBox(height: AppDimens.paddingXL),
 
+          // Challenge Actions Section
+          _buildSectionHeader(context, '🎯 Challenge Actions'),
+          _buildActionGrid(context, [
+            _DebugAction(
+              icon: Icons.play_arrow_rounded,
+              label: 'Start Random',
+              color: Colors.orange,
+              onTap: () => _startRandomChallenge(ref, context),
+            ),
+            _DebugAction(
+              icon: Icons.check_circle_rounded,
+              label: 'Check Progress',
+              color: Colors.blue,
+              onTap: () => _checkChallengeProgress(ref, context),
+            ),
+            _DebugAction(
+              icon: Icons.done_all_rounded,
+              label: 'Complete',
+              color: Colors.green,
+              onTap: () => _completeChallenge(ref, context),
+            ),
+            _DebugAction(
+              icon: Icons.cancel_rounded,
+              label: 'Cancel',
+              color: Colors.red,
+              onTap: () => _cancelChallenge(ref, context),
+            ),
+          ]),
+          SizedBox(height: AppDimens.paddingXL),
+
           // Data Actions Section
           _buildSectionHeader(context, '💾 Data Actions'),
           _buildActionGrid(context, [
@@ -580,12 +611,91 @@ class _DebugScreenState extends ConsumerState<DebugScreen> {
     );
   }
 
+  void _startRandomChallenge(WidgetRef ref, BuildContext context) async {
+    HapticFeedback.mediumImpact();
+    final challenge = await ref.read(activeChallengeProvider.notifier).startRandomChallenge();
+    if (challenge != null && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Random challenge started!')),
+      );
+    }
+  }
+
+  void _checkChallengeProgress(WidgetRef ref, BuildContext context) async {
+    HapticFeedback.lightImpact();
+    await ref.read(activeChallengeProvider.notifier).checkProgress();
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Challenge progress checked!')),
+      );
+    }
+  }
+
+  void _completeChallenge(WidgetRef ref, BuildContext context) async {
+    HapticFeedback.mediumImpact();
+    final challenge = ref.read(activeChallengeProvider);
+    if (challenge != null) {
+      final definition = Challenges.getById(challenge.challengeId);
+      if (definition != null) {
+        // Manually mark all days as complete
+        final progress = <String, dynamic>{};
+        for (int i = 0; i < definition.targetDays; i++) {
+          final date = challenge.startDate.add(Duration(days: i));
+          final key = '${date.year}-${date.month}-${date.day}';
+          progress[key] = true;
+        }
+        
+        final updated = challenge.copyWith(progress: progress);
+        await ref.read(storageServiceProvider).updateChallenge(updated);
+        
+        // Manually trigger completion
+        await ref.read(storageServiceProvider).completeChallenge(challenge.challengeId);
+        ref.read(activeChallengeProvider.notifier).refresh();
+        
+        // Trigger celebration
+        ref.read(celebrationProvider.notifier).triggerChallengeCelebration(
+          definition,
+          updated.copyWith(completed: true, completedAt: DateTime.now()),
+        );
+        
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Challenge completed!')),
+          );
+        }
+      }
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No active challenge')),
+        );
+      }
+    }
+  }
+
+  void _cancelChallenge(WidgetRef ref, BuildContext context) async {
+    HapticFeedback.lightImpact();
+    final challenge = ref.read(activeChallengeProvider);
+    if (challenge != null) {
+      final updated = challenge.copyWith(status: ChallengeStatus.expired);
+      await ref.read(storageServiceProvider).updateChallenge(updated);
+      ref.read(activeChallengeProvider.notifier).refresh();
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Challenge cancelled')),
+        );
+      }
+    }
+  }
+
   void _refreshAllState(WidgetRef ref) {
     HapticFeedback.lightImpact();
     ref.read(settingsProvider.notifier).refresh();
     ref.read(todayEntriesProvider.notifier).refresh();
     ref.read(containersProvider.notifier).refresh();
     ref.read(achievementsProvider.notifier).checkAndUnlockAchievements();
+    ref.read(activeChallengeProvider.notifier).refresh();
   }
 }
 

@@ -3,6 +3,8 @@ import 'package:uuid/uuid.dart';
 import '../models/water_entry.dart';
 import '../models/container.dart';
 import '../models/achievement.dart';
+import '../models/challenge.dart';
+import '../models/shop_item.dart';
 
 /// Service for managing local storage using Hive
 /// 
@@ -13,12 +15,16 @@ class StorageService {
   static const String _settingsBoxName = 'user_settings';
   static const String _containersBoxName = 'containers';
   static const String _achievementsBoxName = 'achievements';
+  static const String _challengesBoxName = 'challenges';
+  static const String _purchasedItemsBoxName = 'purchased_items';
   static const String _settingsKey = 'settings';
 
   late Box<WaterEntry> _waterEntriesBox;
   late Box<UserSettings> _settingsBox;
   late Box<WaterContainer> _containersBox;
   late Box<UnlockedAchievement> _achievementsBox;
+  late Box<ActiveChallenge> _challengesBox;
+  late Box<PurchasedItem> _purchasedItemsBox;
 
   final Uuid _uuid = const Uuid();
 
@@ -42,12 +48,23 @@ class StorageService {
     if (!Hive.isAdapterRegistered(4)) {
       Hive.registerAdapter(UnlockedAchievementAdapter());
     }
+    if (!Hive.isAdapterRegistered(5)) {
+      Hive.registerAdapter(ActiveChallengeAdapter());
+    }
+    if (!Hive.isAdapterRegistered(6)) {
+      Hive.registerAdapter(ShopItemAdapter());
+    }
+    if (!Hive.isAdapterRegistered(7)) {
+      Hive.registerAdapter(PurchasedItemAdapter());
+    }
 
     // Open boxes
     _waterEntriesBox = await Hive.openBox<WaterEntry>(_waterEntriesBoxName);
     _settingsBox = await Hive.openBox<UserSettings>(_settingsBoxName);
     _containersBox = await Hive.openBox<WaterContainer>(_containersBoxName);
     _achievementsBox = await Hive.openBox<UnlockedAchievement>(_achievementsBoxName);
+    _challengesBox = await Hive.openBox<ActiveChallenge>(_challengesBoxName);
+    _purchasedItemsBox = await Hive.openBox<PurchasedItem>(_purchasedItemsBoxName);
 
     // Initialize default settings if not exists
     if (_settingsBox.get(_settingsKey) == null) {
@@ -394,12 +411,162 @@ class StorageService {
     return _waterEntriesBox.length;
   }
 
+  // ==================== CHALLENGES ====================
+
+  /// Get active challenge
+  ActiveChallenge? getActiveChallenge() {
+    final challenges = _challengesBox.values.where((c) => 
+      c.status == ChallengeStatus.active && 
+      DateTime.now().isBefore(c.endDate)
+    ).toList();
+    
+    if (challenges.isEmpty) return null;
+    // Return the most recent active challenge
+    challenges.sort((a, b) => b.startDate.compareTo(a.startDate));
+    return challenges.first;
+  }
+
+  /// Get all challenges (active, completed, failed)
+  List<ActiveChallenge> getAllChallenges() {
+    return _challengesBox.values.toList()
+      ..sort((a, b) => b.startDate.compareTo(a.startDate));
+  }
+
+  /// Get completed challenges
+  List<ActiveChallenge> getCompletedChallenges() {
+    return _challengesBox.values
+        .where((c) => c.completed)
+        .toList()
+      ..sort((a, b) => (b.completedAt ?? b.endDate).compareTo(a.completedAt ?? a.endDate));
+  }
+
+  /// Start a new challenge
+  Future<ActiveChallenge> startChallenge(String challengeId) async {
+    final definition = Challenges.getById(challengeId);
+    if (definition == null) {
+      throw Exception('Challenge not found: $challengeId');
+    }
+
+    // End any existing active challenge
+    final existing = getActiveChallenge();
+    if (existing != null) {
+      await updateChallenge(existing.copyWith(
+        status: ChallengeStatus.expired,
+      ));
+    }
+
+    final now = DateTime.now();
+    final endDate = now.add(Duration(days: definition.targetDays));
+
+    final challenge = ActiveChallenge(
+      challengeId: challengeId,
+      startDate: now,
+      endDate: endDate,
+      status: ChallengeStatus.active,
+    );
+
+    await _challengesBox.put(challengeId, challenge);
+    return challenge;
+  }
+
+  /// Update challenge progress
+  Future<void> updateChallenge(ActiveChallenge challenge) async {
+    await _challengesBox.put(challenge.challengeId, challenge);
+  }
+
+  /// Mark challenge as completed
+  Future<void> completeChallenge(String challengeId) async {
+    final challenge = _challengesBox.get(challengeId);
+    if (challenge != null) {
+      final updated = challenge.copyWith(
+        completed: true,
+        completedAt: DateTime.now(),
+        status: ChallengeStatus.completed,
+      );
+      await _challengesBox.put(challengeId, updated);
+    }
+  }
+
+  // ==================== SHOP ====================
+
+  /// Get purchased items
+  List<PurchasedItem> getPurchasedItems() {
+    return _purchasedItemsBox.values.toList();
+  }
+
+  /// Check if item is purchased
+  bool isItemPurchased(String itemId) {
+    return _purchasedItemsBox.values.any((item) => item.itemId == itemId);
+  }
+
+  /// Purchase an item
+  Future<void> purchaseItem(String itemId) async {
+    if (isItemPurchased(itemId)) return;
+    
+    final purchased = PurchasedItem(
+      itemId: itemId,
+      purchasedAt: DateTime.now(),
+    );
+    await _purchasedItemsBox.put(itemId, purchased);
+  }
+
+  /// Equip an item (for themes, icons, etc.)
+  Future<void> equipItem(String itemId) async {
+    // Unequip all items of the same category
+    final item = ShopCatalog.getById(itemId);
+    if (item == null) return;
+
+    final sameCategory = _purchasedItemsBox.values
+        .where((p) => ShopCatalog.getById(p.itemId)?.category == item.category)
+        .toList();
+
+    for (final purchased in sameCategory) {
+      if (purchased.itemId != itemId) {
+        final updated = purchased.copyWith(isEquipped: false);
+        await _purchasedItemsBox.put(purchased.itemId, updated);
+      }
+    }
+
+    // Equip the selected item
+    final purchased = _purchasedItemsBox.get(itemId);
+    if (purchased != null) {
+      final updated = purchased.copyWith(isEquipped: true);
+      await _purchasedItemsBox.put(itemId, updated);
+    }
+  }
+
+  /// Get equipped item for category
+  String? getEquippedItemId(ShopItemCategory category) {
+    final equipped = _purchasedItemsBox.values
+        .where((p) => p.isEquipped && ShopCatalog.getById(p.itemId)?.category == category)
+        .firstOrNull;
+    return equipped?.itemId;
+  }
+
+  /// Add points to user
+  Future<void> addPoints(int points) async {
+    final settings = getSettings();
+    settings.points += points;
+    await _settingsBox.put(_settingsKey, settings);
+  }
+
+  /// Spend points
+  Future<bool> spendPoints(int points) async {
+    final settings = getSettings();
+    if (settings.points < points) return false;
+    settings.points -= points;
+    await _settingsBox.put(_settingsKey, settings);
+    return true;
+  }
+
   /// Clear all data (for testing or reset)
   Future<void> clearAllData() async {
     await _waterEntriesBox.clear();
     await _settingsBox.clear();
     await _containersBox.clear();
     await _achievementsBox.clear();
+    await _challengesBox.clear();
+    await _purchasedItemsBox.clear();
     await _settingsBox.put(_settingsKey, UserSettings());
     await _initializeDefaultContainers();
   }

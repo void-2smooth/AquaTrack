@@ -103,6 +103,9 @@ class UserSettings extends HiveObject {
   @HiveField(12)
   double? calculatedGoalMl; // Calculated goal based on weight/activity
 
+  @HiveField(13)
+  int points; // User's points for shop purchases
+
   UserSettings({
     this.dailyGoalMl = 2000, // Default 2L
     this.useMetricUnits = true,
@@ -117,6 +120,7 @@ class UserSettings extends HiveObject {
     this.activityLevel,
     this.useCustomGoal = true, // Default to custom until profile is set
     this.calculatedGoalMl,
+    this.points = 0, // Start with 0 points
   });
 
   /// Get activity level enum
