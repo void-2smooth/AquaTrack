@@ -12,6 +12,7 @@ import 'screens/history_screen.dart';
 import 'screens/achievements_screen.dart';
 import 'screens/challenges_screen.dart';
 import 'screens/shop_screen.dart';
+import 'screens/analytics_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/profile_setup_screen.dart';
@@ -153,6 +154,7 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
   final List<Widget> _screens = const [
     HomeScreen(),
     HistoryScreen(),
+    AnalyticsScreen(),
     ChallengesScreen(),
     ShopScreen(),
     AchievementsScreen(),
@@ -274,6 +276,11 @@ class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
             icon: Icon(Icons.history_outlined),
             selectedIcon: Icon(Icons.history),
             label: 'History',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.insights_outlined),
+            selectedIcon: Icon(Icons.insights),
+            label: 'Analytics',
           ),
           const NavigationDestination(
             icon: Icon(Icons.emoji_events_outlined),

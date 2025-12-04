@@ -7,6 +7,7 @@ import '../models/challenge.dart';
 import '../models/shop_item.dart';
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
+import '../services/analytics_service.dart';
 
 // ==================== SERVICE PROVIDERS ====================
 
@@ -1132,3 +1133,62 @@ class PurchasedItemsNotifier extends StateNotifier<List<PurchasedItem>> {
     _loadPurchasedItems();
   }
 }
+
+// ==================== ANALYTICS PROVIDERS ====================
+
+/// Provider for analytics service
+final analyticsServiceProvider = Provider<AnalyticsService>((ref) {
+  final storageService = ref.watch(storageServiceProvider);
+  return AnalyticsService(storageService);
+});
+
+/// Provider for today's hydration score
+final dailyScoreProvider = Provider<double>((ref) {
+  final analytics = ref.watch(analyticsServiceProvider);
+  return analytics.calculateDailyScore(DateTime.now());
+});
+
+/// Provider for weekly average score
+final weeklyAverageScoreProvider = Provider<double>((ref) {
+  final analytics = ref.watch(analyticsServiceProvider);
+  return analytics.getWeeklyAverageScore();
+});
+
+/// Provider for score history (last 30 days)
+final scoreHistoryProvider = Provider<List<Map<String, dynamic>>>((ref) {
+  final analytics = ref.watch(analyticsServiceProvider);
+  final now = DateTime.now();
+  final history = <Map<String, dynamic>>[];
+
+  for (int i = 0; i < 30; i++) {
+    final date = now.subtract(Duration(days: i));
+    final score = analytics.calculateDailyScore(date);
+    if (score > 0) {
+      history.add({
+        'date': date,
+        'score': score,
+      });
+    }
+  }
+
+  return history.reversed.toList(); // Oldest to newest
+});
+
+/// Provider for score trend (improving/declining)
+final scoreTrendProvider = Provider<String>((ref) {
+  final history = ref.watch(scoreHistoryProvider);
+  if (history.length < 7) return 'insufficient_data';
+
+  final recent = history.sublist(history.length - 7);
+  final older = history.length >= 14 
+      ? history.sublist(history.length - 14, history.length - 7)
+      : history.sublist(0, history.length - 7);
+
+  final recentAvg = recent.map((e) => e['score'] as double).reduce((a, b) => a + b) / recent.length;
+  final olderAvg = older.map((e) => e['score'] as double).reduce((a, b) => a + b) / older.length;
+
+  final diff = recentAvg - olderAvg;
+  if (diff > 5) return 'improving';
+  if (diff < -5) return 'declining';
+  return 'stable';
+});
